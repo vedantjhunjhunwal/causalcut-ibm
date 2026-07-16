@@ -1,0 +1,20 @@
+# Single-command deployment (design doc Appendix B: docker-compose, not k8s).
+services:
+  api:
+    build: .
+    container_name: causalcut-api
+    ports:
+      - "8000:8000"
+    environment:
+      CAUSALCUT_ENVIRONMENT: dev
+      CAUSALCUT_LOG_JSON: "true"
+      CAUSALCUT_DB_PATH: /srv/data/causalcut.db
+      CAUSALCUT_QUEUE_CONSUMER_COUNT: "2"
+    volumes:
+      # Named volume, not a bind mount: SQLite WAL on a host-mounted
+      # filesystem (esp. Docker Desktop) can lose locking guarantees.
+      - causalcut-data:/srv/data
+    restart: unless-stopped
+
+volumes:
+  causalcut-data:
