@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any, Iterable, Self
+from typing import Any, Iterable
+from typing_extensions import Self
 
 import aiosqlite
 

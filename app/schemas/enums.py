@@ -8,7 +8,13 @@ assumption, counterfactual estimate, regulatory evidence and human decision
 
 from __future__ import annotations
 
-from enum import StrEnum
+try:
+    from enum import StrEnum
+except ImportError:
+    from enum import Enum
+    class StrEnum(str, Enum):
+        def __str__(self) -> str:
+            return str(self.value)
 
 
 class InformationClass(StrEnum):
