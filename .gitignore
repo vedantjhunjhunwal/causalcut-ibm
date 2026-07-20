@@ -1,3 +1,9 @@
-.venv/*
-regulatory_docs/__pycache__/*
- __pycache__/*
+.venv/
+__pycache__/
+*.pyc
+*.joblib
+.datasets/hydraulic/
+.datasets/ai4i/
+.datasets/*.csv
+.datasets/*.zip
+regulatory_docs/__pycache__/
