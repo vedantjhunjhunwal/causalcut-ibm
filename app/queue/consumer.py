@@ -177,6 +177,7 @@ class ConsumerPool:
         db: Database,
         count: int = 2,
         max_retries: int = 3,
+        risk_engine: "object | None" = None,
     ) -> None:
         self.queue = queue
         self.db = db
@@ -185,6 +186,11 @@ class ConsumerPool:
         self.projector = StateProjector(db)
         self.events = EventRepository(db)
         self.dlq = DeadLetterRepository(db)
+        # Optional analytical subscriber. It runs *after* the durable projection
+        # and is fully isolated: a risk-engine error can never fail or retry the
+        # state projection (see _handle). Kept as a plain object to avoid a hard
+        # import cycle between queue and engine.
+        self.risk_engine = risk_engine
         self._tasks: list[asyncio.Task] = []
 
     async def start(self) -> None:
@@ -230,6 +236,17 @@ class ConsumerPool:
                 extra={"event_id": str(e.event_id), "event_type": str(e.event_type),
                        "consumer": name},
             )
+            # Analytical subscriber runs after the durable projection. Isolated:
+            # its failure must not dead-letter or retry a correctly-projected
+            # event, so we catch and log rather than propagate.
+            if self.risk_engine is not None:
+                try:
+                    self.risk_engine.apply_canonical(e)
+                except Exception:  # pragma: no cover - defensive
+                    log.exception(
+                        "risk engine failed on event (projection unaffected)",
+                        extra={"event_id": str(e.event_id)},
+                    )
         except Exception as exc:
             self.queue.counters.failed += 1
             if item.attempt < self.max_retries:

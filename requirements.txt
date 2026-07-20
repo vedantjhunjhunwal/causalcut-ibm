@@ -1,3 +1,4 @@
+# --- Ingestion spine (FastAPI monolith, schemas, WAL SQLite, async queue) ---
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
@@ -5,5 +6,11 @@ pydantic-settings==2.7.1
 aiosqlite==0.20.0
 python-json-logger==3.2.1
 httpx==0.28.1
+
+# --- Analytical half (hypergraph engine + minimum-causal-cut optimiser) ---
+networkx==3.6.1
+ortools==9.15.6755
+
+# --- Tooling ---
 pytest==8.3.4
 pytest-asyncio==0.25.0

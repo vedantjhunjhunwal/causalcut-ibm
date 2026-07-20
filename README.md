@@ -1,142 +1,261 @@
-# CAUSALCUT — Day 1
+# CAUSALCUT
 
-*Causal Accident-path Uncovering System with Automated Least-Cut Intervention*
-Steelforge Industries · Minimum-Causal-Cut Safety Twin
+**Causal Accident-path Uncovering System with Automated Least-CUT Intervention**
 
-> "Not what went wrong — what to cut, right now, to keep everyone safe."
+A defensive industrial-safety "safety twin" for a steel plant. CAUSALCUT ingests
+a live stream of plant events, maintains a materialised plant-state store, models
+the plant as a dynamic **safety hypergraph**, detects **compound accident chains**
+(condition combinations that are individually tolerable but jointly dangerous),
+and computes the **minimum set of interventions** that breaks every high-risk
+pathway — subject to cost, disruption, and human-approval constraints.
 
-Day 1 builds the **spine**: the canonical event contract, the trust boundary, the
-durable state store, and the async dispatch path. No models, no hypergraph, no
-optimiser yet — those all plug into the queue that exists as of today.
+The system only ever *recommends*. Every intervention is gated behind an
+authenticated human approval and recorded in a tamper-evident audit log.
 
 ---
 
-## What runs today
+## Architecture — two halves, one monolith
+
+CAUSALCUT is a **modular monolith** (design doc Appendix B — deliberately no
+Kafka / k8s / graph-DB for the MVP). It has two cooperating halves that share a
+single event stream:
 
 ```
-producer ──► POST /api/v1/events/ingest
-                │
-                ▼
-        ┌───────────────────┐
-        │ validate + tag    │  Pydantic v2, information_class enforced
-        └────────┬──────────┘
-                 ▼
-        ┌───────────────────┐
-        │ PERSIST           │  events table, append-only, SQLite WAL
-        └────────┬──────────┘
-                 ▼
-        ┌───────────────────┐
-        │ asyncio.Queue     │  bounded, backpressure-aware
-        └────────┬──────────┘
-                 ▼
-        ┌───────────────────┐
-        │ consumer pool     │  projects → sensor_latest / worker_zones / permits
-        └────────┬──────────┘   failures → dead_letter
-                 ▼
-          GET /api/v1/state/zones/{zone_id}
+                         ┌──────────────────────── FastAPI app (app.main) ───────────────────────┐
+   plant events          │                                                                        │
+  ─────────────────────► │  POST /api/v1/events/ingest                                            │
+                         │        │  validate → tag → PERSIST → dispatch                           │
+                         │        ▼                                                                │
+                         │   append-only event store (SQLite, WAL)                                 │
+                         │        │                                                                │
+                         │        ▼                                                                │
+                         │   EventQueue ──► ConsumerPool ─────────────────────────┐                │
+                         │                     │                                  │                │
+   INGESTION SPINE       │                     ▼                                  ▼                │
+   (schemas, DB, queue)  │           StateProjector                        RiskEngine (subscriber) │
+                         │           (plant-state store)                   in-memory hypergraph    │  ANALYTICAL HALF
+                         │             permits / workers /                       │                 │  (engine, gateway)
+                         │             sensors / barriers                        ▼                 │
+                         │                     │                        compound rules →           │
+                         │                     ▼                        accident sub-pathways →     │
+                         │   GET /api/v1/state/zones/{zone}             minimum causal cut          │
+                         │                                                       │                 │
+                         │                                     GET /api/v1/risk/recommendation      │
+                         │                                     POST /api/v1/risk/approve            │
+                         │                                        (auth + write-ahead audit log)    │
+                         └────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Quick start
+**Ingestion spine** (`app/schemas`, `app/db`, `app/queue`, `app/api`, `app/core`)
+— the canonical event schema, the WAL SQLite plant-state store, the async
+ingestion queue with backpressure and dead-lettering, and the HTTP boundary with
+correlation-id tracing, structured logging, timeouts and body limits.
+
+**Analytical half** (`app/engine`, `app/gateway`, `app/analysis`) — the NetworkX
+safety hypergraph, the compound-rule engine, the OR-Tools minimum-causal-cut
+optimiser, the shift-handover validator, and the authenticated + audited approval
+gateway.
+
+The two halves meet at exactly one seam: the `RiskEngine` subscribes to the same
+events the `StateProjector` writes to SQLite, converting each canonical event to
+the engine's internal domain model via `app/engine/adapter.py`. The risk engine
+runs *after* the durable projection and is fully isolated — a risk-engine error
+can never fail, retry, or dead-letter a correctly-projected event.
+
+---
+
+## What it does (one scenario)
+
+The coke-oven escalation (design doc §8), replayable via `scripts/seed_scenario.py`
+or the dashboard's "Ingest Coke-Oven Scenario" button:
+
+| Plant time | Event | System state |
+|-----------|-------|--------------|
+| t=0s   | Worker W-003 in Zone-1 | below threshold |
+| t=5s   | Hot-work permit PTW-007 active | below threshold |
+| t=180s | Gas rising to 180 ppm (sub-critical) | below threshold |
+| t=360s | W-003 missing hard-hat | below threshold — a lone PPE issue is not a flash-fire pathway |
+| t=420s | Ventilation degrades to 0.55 | below threshold — still no gas source |
+| t=450s | Gas hits 215 ppm (critical) | **3 accident paths activate → minimum cut computed** |
+
+At t=450s the compound hazard materialises and CAUSALCUT recommends:
+
+```
+minimum causal cut (residual 0.098 vs threshold 0.15, cost LOW):
+   1. Suspend hot-work permit PTW-007 in zone-1
+   2. Evacuate worker W-003 from zone-1
+```
+
+It deliberately does **not** close the zone (the "sledgehammer"): a cheaper
+two-action cut drives residual risk below the safety threshold, so the weighted
+optimiser prefers it.
+
+---
+
+## Running it
+
+### Local (no Docker)
 
 ```bash
 pip install -r requirements.txt
-uvicorn app.main:app --reload          # http://localhost:8000/docs
-pytest tests -q                        # 26 tests
-python scripts/seed_scenario.py        # replays the §8.1 coke-oven escalation
+
+# full test suite (50 tests: ingestion spine + engine + integration)
+pytest tests -q          # or:  make test
+
+# start the API
+make run                 # uvicorn app.main:app --reload  → http://localhost:8000
 ```
 
-Or `docker compose up --build`.
+With the server running, replay the scenario in another terminal:
 
-## Endpoints
+```bash
+make seed                # python scripts/seed_scenario.py --speed 60
+```
 
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/api/v1/events/ingest` | One canonical event → queue |
-| `POST` | `/api/v1/events/ingest/batch` | Up to 500; partial success |
-| `GET` | `/api/v1/events/{event_id}` | Read from the append-only store |
-| `GET` | `/api/v1/events` | Recent, filterable by zone / type / info class |
-| `GET` | `/api/v1/events/dead-letter/list` | What failed downstream |
-| `GET` | `/api/v1/state/zones/{zone_id}` | Plant-state projection |
-| `GET` | `/api/v1/state/permits` | Active permit registry |
-| `GET` | `/api/v1/state/workers` | Occupancy + PPE status |
-| `GET` | `/api/v1/state/sensors/{id}/history` | Rolling telemetry |
-| `GET` | `/api/v1/health` · `/ready` · `/stats` | Liveness, readiness, counters |
+Interactive API docs (Swagger) are auto-generated at <http://localhost:8000/docs>.
 
-Swagger at `/docs`, ReDoc at `/redoc`, schema at `/openapi.json`.
+### Docker (API + dashboard)
+
+```bash
+docker compose up --build
+```
+
+- API: <http://localhost:8000> (docs at `/docs`)
+- Operator console: <http://localhost:8080>
+
+SQLite and the write-ahead audit log persist in the `causalcut-data` volume.
 
 ---
 
-## Four decisions worth defending in review
+## API reference (`/api/v1`)
 
-**1. Persist before enqueue.** Most tutorials queue first and write later. We
-invert it. A `202` means the event is durably in the append-only store — the
-queue is only a dispatch hint. Consequence: a full queue, a crashed consumer, or
-a restart costs *latency*, never *evidence*. For a system whose entire claim is
-an auditable causal chain, a lost event is worse than a late one.
+Ingestion & state (spine):
 
-**2. The information class is a schema invariant, not a column.** §1.2 promises
-strict separation between measured / predicted / synthetic / counterfactual /
-regulatory / human. That promise is worthless if enforced by convention, so it
-is enforced by validators that reject at the boundary:
+| Method & path | Description |
+|---------------|-------------|
+| `GET  /health`, `/ready`, `/stats` | Liveness, readiness (checks WAL + queue saturation), counters by information class |
+| `POST /events/ingest` | Ingest one canonical event (validate → tag → persist → queue) |
+| `POST /events/ingest/batch` | Ingest a batch; partial success, one result row per event |
+| `GET  /events`, `/events/{id}` | Read the append-only event store |
+| `GET  /events/dead-letter/list` | Events that failed downstream processing |
+| `GET  /state/zones/{zone}` | Materialised zone state (sensors, workers, permits) |
+| `GET  /state/permits`, `/state/workers`, `/state/sensors/{id}/history` | Plant-state projections |
 
-- `M` + `synthetic_flag=true` → rejected. A measurement is from the plant or it isn't.
-- `P` without `model_version` → rejected. A prediction that can't name its model can't be recalibrated.
-- `C` with `uncertainty=0` → rejected. A counterfactual is never certain.
+Risk, approval & handover (analytical half):
 
-Later, when the optimiser explains *why* it cut a permit, every input already
-carries its epistemic status. That is retrofit-proof only if it starts here.
+| Method & path | Auth | Description |
+|---------------|------|-------------|
+| `GET  /risk/paths` | — | Active accident pathways (engine view) |
+| `GET  /risk/recommendation` | — | Current minimum causal cut (or none) |
+| `POST /risk/approve` | **shift_officer+** | Approve / reject / defer; write-ahead audited |
+| `GET  /risk/audit` | — | Tail the hash-chained audit log + verify the chain |
+| `POST /handover/validate` | — | Validate a shift handover against live state |
 
-**3. Append-only enforced by a trigger.** `events` has a `BEFORE DELETE` trigger
-that aborts. Not a code review rule — a database rule. The audit trail is the
-product.
+Approval authenticates via the `X-API-Key` header.
 
-**4. WAL, deliberately.** Ingest writes continuously; the console and (soon) the
-hypergraph engine read continuously. Under the default rollback journal every
-writer blocks every reader. Under WAL neither blocks the other. `/ready` fails
-if the journal mode is anything but `wal`, so a misconfigured deploy is loud.
+### ⚠️ Development keys
 
-## Schema invariants under test
+The approval gateway ships with **development keys** so the demo runs out of the
+box:
 
-`pytest tests -q` → 26 passing, covering: class/flag contradictions, missing
-`model_version` on `[P]`, zero-uncertainty `[C]`, naive timestamps, out-of-bounds
-severity, unknown fields, future-clock rejection, staleness, content-hash dedup,
-event immutability, ingest idempotency, batch partial success, WAL assertion,
-delete-trigger enforcement, and the full ingest → queue → projection round trip.
+| Key | Operator | Role |
+|-----|----------|------|
+| `dev-key-so-a` | SO-A | shift_officer |
+| `dev-key-so-b` | SO-B | shift_officer |
+| `dev-key-sm-01` | SM-01 | safety_manager |
+| `dev-key-viewer` | VIEW-01 | viewer |
 
-## Layout
+**Local demo only.** In any real deployment set `CAUSALCUT_OPERATORS` (see
+`.env.example`) and remove the dev keys. Keys are stored only as SHA-256 hashes
+and compared in constant time. (Separately, `CAUSALCUT_API_KEY` optionally guards
+the ingest write endpoint.)
+
+---
+
+## The minimum-causal-cut formulation (design doc §6)
+
+Each activated hyperedge decomposes into one or more **accident sub-pathways**,
+each a conjunction of *necessary* factors (e.g. a flash fire needs
+`gas_source ∧ ignition_source`). Breaking **any one** necessary factor breaks
+that route. Given candidate interventions (each removing a set of factors):
+
+```
+minimise   Σ_j (w_cost·cost_j + w_disruption·disruption_j
+                + w_latency·latency_j + w_cardinality) · x_j
+s.t.       every live sub-pathway is broken by ≥ 1 chosen intervention
+           residual_risk(x) ≤ safety_threshold
+           x_j ∈ {0, 1}
+```
+
+Solved with OR-Tools CP-SAT (greedy fallback if OR-Tools is unavailable, and an
+emergency zone-closure fallback if no feasible cut exists). `w_cardinality`
+dominates, steering the solver toward few, cheap, low-disruption actions rather
+than blanket closures.
+
+---
+
+## Information-class discipline
+
+Every event carries one of six information classes and they are never silently
+reclassified: `M` measured · `P` predicted · `S` synthetic · `C` counterfactual ·
+`R` regulatory · `H` human. The schema enforces the invariants (a measurement can
+never be synthetic; a prediction must name its model; a counterfactual must carry
+non-zero uncertainty). Risk scores are `P` and are deliberately absent — not
+defaulted to a comforting `0.0` — until the engine computes them.
+
+---
+
+## Safety posture & MVP boundary (design doc §9)
+
+- **Recommend-only.** No autonomous actuation; every action needs an
+  authenticated human approval.
+- **Durability before dispatch.** Events are written to the append-only store
+  *before* being queued, so a full queue or a crashed consumer degrades to
+  "persisted, awaiting replay" — never data loss. Append-only is enforced by a
+  database trigger, not by convention.
+- **Auditable.** Approvals are appended to a write-ahead, hash-chained log;
+  `GET /risk/audit` re-verifies the whole chain and reports the first bad
+  sequence number if any record was tampered with.
+- **Deterministic decisions.** The risk arithmetic and intervention selection are
+  fully deterministic (rules + CP-SAT). The gas projection is monotonic by event
+  time, so out-of-order delivery under concurrent consumers cannot regress state.
+
+This is an MVP blueprint: rules and thresholds are hand-authored and the plant
+model is the bundled Steelforge topology. Production would add learned
+forecasters, a real historian feed, and PostgreSQL — all behind the same
+contracts in `app/schemas/canonical.py`.
+
+---
+
+## Tests
+
+```
+50 passed
+  · 26  ingestion spine (schema invariants, WAL, idempotency, persist-before-queue,
+         projection, dead-letter, append-only enforcement, OpenAPI)
+  · 21  analytical half (hypergraph, compound-rule activation, sub-pathway
+         extraction, minimum-cut incl. "avoid the sledgehammer", handover rules,
+         audit hash-chain + tamper detection)
+  ·  3  end-to-end integration (ingest → project + risk from the same stream →
+         authenticated, audited approval; handover endpoint)
+```
+
+## Repository layout
 
 ```
 app/
-  main.py                  # app factory, lifespan (db + queue + consumers)
-  core/     config logging middleware exceptions
-  schemas/  enums canonical ingest      # the contract
-  db/       schema.sql session repositories
-  queue/    event_queue consumer        # asyncio.Queue + projection
-  api/      deps v1/router v1/routes/{health,events,state}
-tests/test_day1.py
-scripts/seed_scenario.py                # §8.1 replay
+  schemas/     canonical event + enums + ingest contracts (Pydantic V2)
+  db/          WAL SQLite session, schema.sql, repositories
+  queue/       async EventQueue + ConsumerPool (StateProjector + RiskEngine hook)
+  api/v1/      routes: health, events, state, risk
+  core/        config, logging, middleware, exceptions
+  engine/      hypergraph, compound rules, path extractor, cut optimiser,
+               types (engine domain model), adapter, risk_engine
+  gateway/     auth (role tiers), audit_log (write-ahead, hash-chained)
+  analysis/    handover validator
+dashboard/     React operator console (Vite + nginx)
+scripts/       seed_scenario.py
+scenarios/     coke_oven.json
+tests/         test_day1, test_hypergraph, test_compound_rules, test_handover,
+               test_integration
 ```
-
-## Deliberate omissions (and why)
-
-- **`risk_score` returns `null`**, not `0.0`. Risk is `[P]` and arrives with the
-  hypergraph engine. A default of zero on a safety console reads as "safe."
-- **No auth by default.** Set `CAUSALCUT_API_KEY` to turn on the key check on
-  write paths. Real RBAC is required before the Human Approval Gateway ships —
-  that endpoint changes plant state and cannot sit behind a shared secret.
-- **Asset condition table deferred** to the equipment-failure module. Events are
-  already durable, so nothing is lost by projecting later.
-
-## Next
-
-Day 2 plugs the gas-anomaly module (XGBoost on UCI Gas Sensor Array Drift) into
-this queue as the first real consumer, emitting `[P]` events through the same
-canonical schema. The contract doesn't change — that's the point of building it
-first.
-
----
-
-**Safety note.** Per §9.4, nothing here is a safety-rated control system. The
-architecture never executes an intervention without human approval, and
-recommendations must not be a sole decision basis without a certified
-process-safety review and SIL assessment.

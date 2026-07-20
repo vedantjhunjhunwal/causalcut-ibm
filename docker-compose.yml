@@ -1,4 +1,7 @@
-# Single-command deployment (design doc Appendix B: docker-compose, not k8s).
+# CAUSALCUT — single-command deployment (design doc Appendix B: docker-compose,
+# not k8s). One service runs the merged monolith: ingestion spine + risk engine
+# + approval gateway. SQLite plant-state store and the write-ahead audit log
+# persist in a named volume.
 services:
   api:
     build: .
@@ -9,11 +12,24 @@ services:
       CAUSALCUT_ENVIRONMENT: dev
       CAUSALCUT_LOG_JSON: "true"
       CAUSALCUT_DB_PATH: /srv/data/causalcut.db
+      CAUSALCUT_AUDIT_BASE_PATH: /srv/data/audit
       CAUSALCUT_QUEUE_CONSUMER_COUNT: "2"
+      CAUSALCUT_SAFETY_THRESHOLD: "0.15"
+      # Production: set real operator keys and remove the built-in dev keys.
+      # CAUSALCUT_OPERATORS: "SO-A:shift_officer:CHANGE_ME,SM-01:safety_manager:CHANGE_ME"
     volumes:
-      # Named volume, not a bind mount: SQLite WAL on a host-mounted
-      # filesystem (esp. Docker Desktop) can lose locking guarantees.
+      # Named volume, not a bind mount: SQLite WAL on a host-mounted filesystem
+      # (esp. Docker Desktop) can lose locking guarantees.
       - causalcut-data:/srv/data
+    restart: unless-stopped
+
+  dashboard:
+    build: ./dashboard
+    container_name: causalcut-dashboard
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
     restart: unless-stopped
 
 volumes:
