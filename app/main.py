@@ -26,6 +26,10 @@ from app.core.middleware import (
 from app.db.session import Database, set_db
 from app.queue.consumer import ConsumerPool
 from app.queue.event_queue import EventQueue
+from app.engine.risk_engine import RiskEngine
+from app.analysis.handover_validator import HandoverValidator
+from app.gateway.auth import AuthService
+from app.gateway.audit_log import AuditLog
 
 settings = get_settings()
 configure_logging(settings.log_level, settings.log_json)
@@ -51,17 +55,32 @@ async def lifespan(app: FastAPI):
         max_size=settings.queue_max_size,
         put_timeout=settings.queue_put_timeout_seconds,
     )
+
+    # Analytical half: the risk engine subscribes to the same event stream the
+    # state projector writes, and the gateway guards the recommend->act step.
+    risk_engine = RiskEngine(safety_threshold=settings.safety_threshold)
+    auth = AuthService()
+    audit = AuditLog(base_path=settings.audit_base_path)
+    handover_validator = HandoverValidator(
+        risk_engine.graph, ack_grace_minutes=settings.handover_ack_grace_min
+    )
+
     consumers = ConsumerPool(
         queue=queue,
         db=db,
         count=settings.queue_consumer_count,
         max_retries=settings.dead_letter_max_retries,
+        risk_engine=risk_engine,
     )
     await consumers.start()
 
     app.state.db = db
     app.state.event_queue = queue
     app.state.consumers = consumers
+    app.state.risk_engine = risk_engine
+    app.state.auth = auth
+    app.state.audit = audit
+    app.state.handover_validator = handover_validator
 
     try:
         yield

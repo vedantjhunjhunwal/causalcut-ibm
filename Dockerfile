@@ -1,3 +1,6 @@
+# CAUSALCUT — merged modular monolith (ingestion spine + analytical engine).
+# One image runs the whole Python system (design doc Appendix B: docker-compose,
+# not k8s; single container for the monolith).
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -8,16 +11,21 @@ WORKDIR /srv
 
 RUN groupadd -r causalcut && useradd -r -g causalcut causalcut
 
+# Dependencies first for layer caching. ortools/networkx are the analytical
+# half; everything else is the ingestion spine.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 COPY scripts ./scripts
+COPY scenarios ./scenarios
 
-RUN mkdir -p /srv/data && chown -R causalcut:causalcut /srv
+# Durable state: SQLite plant-state store + write-ahead audit log both live here.
+RUN mkdir -p /srv/data/audit && chown -R causalcut:causalcut /srv
 USER causalcut
 
-ENV CAUSALCUT_DB_PATH=/srv/data/causalcut.db
+ENV CAUSALCUT_DB_PATH=/srv/data/causalcut.db \
+    CAUSALCUT_AUDIT_BASE_PATH=/srv/data/audit
 
 EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \

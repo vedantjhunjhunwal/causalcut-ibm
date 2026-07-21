@@ -50,6 +50,13 @@ class Settings(BaseSettings):
     queue_put_timeout_seconds: float = 0.5
     dead_letter_max_retries: int = 3
 
+    # --- Risk engine + gateway (analytical half) -----------------------
+    safety_threshold: float = 0.15          # residual-risk ceiling for a cut
+    audit_base_path: str = "./data/audit"   # write-ahead approval log
+    handover_ack_grace_min: int = 15
+    # Operators: "id:role:key,..." — if unset, dev keys are used (see gateway).
+    operators: str | None = None
+
     # --- Ingestion policy ----------------------------------------------
     ingest_batch_max: int = 500
     default_validity_window_seconds: int = 300  # PT5M per design doc §5.1

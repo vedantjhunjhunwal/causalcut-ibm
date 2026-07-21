@@ -196,6 +196,28 @@ async def main() -> None:
         for w in zone["workers_present"]:
             print(f"  {w['worker_id']}: ppe_compliant={w['ppe_compliant']} {w['ppe']}")
 
+        # --- Analytical half: the risk engine fed by the same events ---------
+        await asyncio.sleep(0.5)
+        rec = (await c.get("/api/v1/risk/recommendation")).json()["recommendation"]
+        print("\n--- minimum causal cut ---")
+        if not rec:
+            print("  (plant below safety threshold — no intervention needed)")
+        else:
+            print(f"  residual risk {rec['residual_risk']} vs threshold "
+                  f"{rec['safety_threshold']} (met={rec['threshold_met']}), "
+                  f"cost {rec['total_cost']}")
+            for i in rec["interventions"]:
+                print(f"    {i['priority']}. {i['action']}")
+            # Approve through the gateway (dev shift-officer key) and audit it.
+            appr = await c.post(
+                "/api/v1/risk/approve",
+                json={"decision": "APPROVE", "reason": "seed script demo"},
+                headers={**headers, "X-API-Key": args.api_key or "dev-key-so-a"},
+            )
+            if appr.status_code == 200:
+                print(f"  approved -> audit seq {appr.json()['audit_seq']} "
+                      f"by {appr.json()['approver']}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
