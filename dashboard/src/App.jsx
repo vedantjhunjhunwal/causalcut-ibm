@@ -1,186 +1,265 @@
-import React, { useEffect, useState, useCallback } from "react";
+﻿import { useState, useEffect, useCallback, useRef } from "react"
+import Plot from "react-plotly.js"
 
-// Merged backend serves everything under /api/v1.
-const API = "/api/v1";
+const API = "http://localhost:8001/api/v1"
+const DEV_API_KEY = "dev-key-so-a"
+const POLL_MS = 4000
 
-// The coke-oven escalation as ingest payloads. event_time is set to "now" at
-// send time so the ingest clock-sanity guard accepts them; ordering is what the
-// risk graph relies on, and the batch preserves it.
-function scenarioBatch() {
-  const now = () => new Date().toISOString();
-  const gas = (ppm) => ({
-    zone_id: "zone-1", event_type: "gas_anomaly", event_time: now(), source: "gas_v2",
-    model_version: "xgb-gas-v2", information_class: "M",
-    value: { sensor_id: "GS-03", gas_type: "ammonia", concentration_ppm: ppm },
-  });
-  return {
-    events: [
-      { zone_id: "zone-1", event_type: "worker_presence", worker_id: "W-003",
-        event_time: now(), source: "cctv", information_class: "M", value: { present: true } },
-      { zone_id: "zone-1", event_type: "permit_status", event_time: now(),
-        information_class: "S", synthetic_flag: true, source: "permit",
-        value: { permit_id: "PTW-007", permit_type: "hot_work", status: "active", issued_to: "W-003" } },
-      gas(180),
-      { zone_id: "zone-1", event_type: "ppe_violation", worker_id: "W-003", event_time: now(),
-        source: "cctv", information_class: "M", value: { ppe: { hard_hat: false }, present: true } },
-      { zone_id: "zone-1", event_type: "utility_condition", event_time: now(), source: "scada",
-        information_class: "P", model_version: "vent-v1", uncertainty: 0.1,
-        value: { ventilation_flow_ratio: 0.55, ventilation_status: "degraded" } },
-      gas(215),
-    ],
-  };
+const ZONES = [
+  { id: "zone-1", label: "Zone 1 - Coke Oven" },
+  { id: "zone-2", label: "Zone 2 - Blast Furnace" },
+  { id: "zone-3", label: "Zone 3 - Machine Shop" },
+  { id: "zone-4", label: "Zone 4 - Shared Utilities" },
+  { id: "zone-5", label: "Zone 5 - CCTV / PPE Checkpoints" },
+  { id: "zone-6", label: "Zone 6 - Control Room" },
+]
+
+const DEMO_SCENARIO = {
+  zone_risk: { "zone-1": 0.55 },
+  hazard_severity: { "zone-1": 0.8 },
+  active_paths: ["HE-042"],
+  watch_zone: "zone-1",
+  candidates: [
+    { id: "suspend_permit", action: "Suspend hot-work permit", cost: 0.1, latency_s: 10, covers_paths: ["HE-042"] },
+    { id: "close_barrier", action: "Close zone-1/zone-4 ventilation barrier", cost: 0.15, latency_s: 30, covers_paths: ["HE-042"] },
+    { id: "evacuate", action: "Evacuate zone-1 workers", cost: 0.6, latency_s: 120, covers_paths: ["HE-042"] },
+  ],
 }
 
-const CLASS_LABEL = { M: "Measured", P: "Predicted", S: "Synthetic", C: "Counterfactual", R: "Regulatory", H: "Human" };
+function riskColor(risk) {
+  if (risk >= 0.75) return "bg-red-600"
+  if (risk >= 0.4) return "bg-orange-500"
+  if (risk >= 0.15) return "bg-yellow-400"
+  return "bg-green-600"
+}
 
-function Badge({ cls }) {
-  const colors = { M: "#2563eb", P: "#7c3aed", S: "#9ca3af", C: "#d97706", R: "#059669", H: "#dc2626" };
-  return (
-    <span style={{ background: colors[cls] || "#6b7280", color: "white", borderRadius: 4,
-      padding: "1px 6px", fontSize: 11, fontWeight: 600, marginLeft: 6 }} title={CLASS_LABEL[cls]}>
-      [{cls}]
-    </span>
-  );
+async function safeJson(res) {
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res.json()
 }
 
 export default function App() {
-  const [stats, setStats] = useState(null);
-  const [rec, setRec] = useState(null);
-  const [paths, setPaths] = useState([]);
-  const [apiKey, setApiKey] = useState("dev-key-so-a");
-  const [status, setStatus] = useState("");
+  const [liveMode, setLiveMode] = useState(false)
+  const [zoneRisk, setZoneRisk] = useState({})
+  const [activePaths, setActivePaths] = useState([])
+  const [recommendation, setRecommendation] = useState(null)
+  const [trajectory, setTrajectory] = useState(null)
+  const [auditTail, setAuditTail] = useState([])
+  const [approvalStatus, setApprovalStatus] = useState(null)
+  const [error, setError] = useState(null)
+  const pollRef = useRef(null)
 
-  const refresh = useCallback(async () => {
+  const pollLive = useCallback(async () => {
     try {
-      const [s, r, p] = await Promise.all([
-        fetch(`${API}/stats`).then((x) => x.json()),
-        fetch(`${API}/risk/recommendation`).then((x) => x.json()),
-        fetch(`${API}/risk/paths`).then((x) => x.json()),
-      ]);
-      setStats(s);
-      setRec(r.recommendation);
-      setPaths(p.active_paths || []);
-    } catch {
-      setStatus("backend unreachable");
+      const [paths, rec] = await Promise.all([
+        fetch(`${API}/risk/paths`).then(safeJson),
+        fetch(`${API}/risk/recommendation`).then(safeJson),
+      ])
+      setLiveMode(true)
+      setError(null)
+      setActivePaths(paths.active_paths ?? [])
+      setRecommendation(rec.recommendation ?? null)
+
+      const risk = {}
+      for (const p of paths.active_paths ?? []) {
+        for (const z of p.zones ?? []) {
+          risk[z] = Math.max(risk[z] ?? 0, p.severity ?? 0)
+        }
+      }
+      setZoneRisk(risk)
+    } catch (err) {
+      setLiveMode(false)
+      setZoneRisk(DEMO_SCENARIO.zone_risk)
+      setActivePaths(DEMO_SCENARIO.active_paths)
     }
-  }, []);
+  }, [])
 
   useEffect(() => {
-    refresh();
-    const t = setInterval(refresh, 3000);
-    return () => clearInterval(t);
-  }, [refresh]);
+    pollLive()
+    pollRef.current = setInterval(pollLive, POLL_MS)
+    return () => clearInterval(pollRef.current)
+  }, [pollLive])
 
-  const runScenario = async () => {
-    setStatus("ingesting coke-oven scenario…");
-    const res = await fetch(`${API}/events/ingest/batch`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(scenarioBatch()),
-    });
-    const body = await res.json();
-    await new Promise((r) => setTimeout(r, 1200)); // let consumers project + evaluate
-    await refresh();
-    setStatus(`ingested ${body.accepted} events`);
-  };
+  async function runSimulation() {
+    setError(null)
+    try {
+      const body = liveMode
+        ? { use_live_graph: true, horizon_seconds: 300, dt_seconds: 10,
+            close_barrier_edge: ["zone-1", "zone-4"], close_barrier_at_s: 30, close_barrier_magnitude: 0.05 }
+        : { use_live_graph: false, ...DEMO_SCENARIO, horizon_seconds: 300, dt_seconds: 10,
+            close_barrier_edge: ["zone-1", "zone-4"], close_barrier_at_s: 30, close_barrier_magnitude: 0.05 }
 
-  const decide = async (decision) => {
-    setStatus(`submitting ${decision}…`);
-    const res = await fetch(`${API}/risk/approve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
-      body: JSON.stringify({ recommendation_id: "current", decision, reason: `${decision} via console` }),
-    });
-    const body = await res.json();
-    setStatus(res.ok ? `${decision}: audit #${body.audit_seq} by ${body.approver}`
-                     : `error ${res.status}: ${body.detail || body.error}`);
-    await refresh();
-  };
+      const data = await fetch(`${API}/causal-cut/simulate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }).then(safeJson)
+      setTrajectory(data)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function decide(decision) {
+    setError(null)
+    try {
+      const res = await fetch(`${API}/risk/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-API-Key": DEV_API_KEY },
+        body: JSON.stringify({ recommendation_id: "current", decision, reason: "" }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.detail ?? `approval failed: ${res.status}`)
+        return
+      }
+      setApprovalStatus(data)
+      const tail = await fetch(`${API}/risk/audit?limit=10`).then(safeJson)
+      setAuditTail(tail.records ?? [])
+    } catch (err) {
+      setError(err.message)
+    }
+  }
 
   return (
-    <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 960, margin: "0 auto", padding: 24, color: "#111827" }}>
-      <header style={{ borderBottom: "3px solid #dc2626", paddingBottom: 12, marginBottom: 20 }}>
-        <h1 style={{ margin: 0, fontSize: 26 }}>CAUSALCUT</h1>
-        <p style={{ margin: "4px 0 0", color: "#6b7280" }}>
-          Minimum-Causal-Cut Safety Twin — Operator Console
-        </p>
-      </header>
+    <div className="min-h-screen bg-neutral-950 text-neutral-100 p-8">
+      <div className="max-w-6xl mx-auto space-y-8">
 
-      <section style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: "center", flexWrap: "wrap" }}>
-        <button onClick={runScenario} style={btn("#2563eb")}>▶ Ingest Coke-Oven Scenario</button>
-        <button onClick={refresh} style={btn("#6b7280")}>↻ Refresh</button>
-        <label style={{ marginLeft: "auto", fontSize: 13 }}>
-          Operator key:{" "}
-          <input value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-                 style={{ padding: 4, border: "1px solid #d1d5db", borderRadius: 4, width: 160 }} />
-        </label>
-      </section>
+        <header className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">CAUSALCUT - Operator Console</h1>
+            <p className="text-neutral-400 text-sm mt-1">Steelforge Industries | Minimum-Causal-Cut Safety Twin</p>
+          </div>
+          <span className={`text-xs px-3 py-1 rounded-full font-medium ${liveMode ? "bg-green-900 text-green-300" : "bg-yellow-900 text-yellow-300"}`}>
+            {liveMode ? "LIVE - hypergraph engine connected" : "DEMO MODE - /risk/* not reachable"}
+          </span>
+        </header>
 
-      {stats && (
-        <p style={{ fontSize: 13, color: "#6b7280" }}>
-          Events by class: {Object.entries(stats.events_by_information_class || {}).map(([k, v]) => `${k}:${v}`).join("  ") || "none yet"}
-          {"  ·  "}queue processed {stats.queue?.processed ?? 0} / depth {stats.queue?.depth ?? 0}
-        </p>
-      )}
+        <button onClick={runSimulation} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 font-medium transition">
+          Run What-If Simulation (close zone-1/zone-4 barrier)
+        </button>
 
-      <section style={panel()}>
-        <h2 style={h2()}>Minimum Causal Cut</h2>
-        {!rec && <p style={{ color: "#6b7280" }}>No active recommendation — the plant is below the safety threshold.</p>}
-        {rec && (
-          <>
-            <div style={{ display: "flex", gap: 24, marginBottom: 12, flexWrap: "wrap" }}>
-              <Metric label="Residual risk" value={rec.residual_risk} cls="C" />
-              <Metric label="Threshold" value={rec.safety_threshold} />
-              <Metric label="Met?" value={rec.threshold_met ? "YES" : "NO"} good={rec.threshold_met} />
-              <Metric label="Cost" value={rec.total_cost} />
-              <Metric label="Solver" value={rec.solver} />
-            </div>
-            <ol style={{ paddingLeft: 20 }}>
-              {rec.interventions.map((i) => (
-                <li key={i.intervention_id} style={{ marginBottom: 6 }}>
-                  <b>{i.action}</b>
-                  <span style={{ color: "#6b7280", fontSize: 12 }}> — {i.intervention_type}, cost {i.cost_category}, {i.execution_time_min} min</span>
+        {error && (
+          <div className="rounded-lg border border-red-700 bg-red-950 text-red-300 px-4 py-3 text-sm">
+            {error}
+          </div>
+        )}
+
+        <section>
+          <h2 className="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Factory Zone Map</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {ZONES.map((zone) => {
+              const risk = zoneRisk[zone.id] ?? 0
+              return (
+                <div key={zone.id} className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{zone.label}</span>
+                    <span className={`w-3 h-3 rounded-full ${riskColor(risk)}`} />
+                  </div>
+                  <div className="mt-2 text-2xl font-semibold tabular-nums">{risk.toFixed(2)}</div>
+                  <div className="text-xs text-neutral-500">current risk [{liveMode ? "P" : "S"}]</div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+
+        {activePaths.length > 0 && (
+          <section className="rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+            <h2 className="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Active Accident Pathways</h2>
+            <ul className="space-y-1 text-sm">
+              {activePaths.map((p, i) => (
+                <li key={p.hyperedge_id ?? i} className="text-neutral-300">
+                  {p.hyperedge_id ?? p} {p.pathway ? `— ${p.pathway}` : ""}
                 </li>
               ))}
-            </ol>
-            <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-              <button onClick={() => decide("APPROVE")} style={btn("#059669")}>✔ APPROVE</button>
-              <button onClick={() => decide("REJECT")} style={btn("#dc2626")}>✖ REJECT</button>
-              <button onClick={() => decide("DEFER")} style={btn("#d97706")}>⏸ DEFER</button>
-            </div>
-          </>
+            </ul>
+          </section>
         )}
-      </section>
 
-      <section style={panel()}>
-        <h2 style={h2()}>Active Accident Paths</h2>
-        {paths.length === 0 && <p style={{ color: "#6b7280" }}>None active.</p>}
-        {paths.map((p) => (
-          <div key={p.hyperedge_id} style={{ border: "1px solid #fca5a5", borderRadius: 6, padding: 12, marginBottom: 10, background: "#fef2f2" }}>
-            <div style={{ fontWeight: 700 }}>{p.hyperedge_id} · {p.pathway} · severity {p.severity}</div>
-            <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
-              Zone {p.root_zone} · factors: {p.contributing_factors.join(", ")}
-              {p.propagation_zones?.length > 0 && ` · may propagate to: ${p.propagation_zones.join(", ")}`}
+        {trajectory && (
+          <section className="rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+            <h2 className="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">
+              Zone-4 Risk - Baseline vs. Intervention
+            </h2>
+            <Plot
+              data={[
+                {
+                  x: trajectory.timestamps_s,
+                  y: trajectory.baseline["zone-4"],
+                  type: "scatter", mode: "lines", name: "Do nothing [C]",
+                  line: { color: "#ef4444", dash: "dot" },
+                },
+                ...(trajectory.treated ? [{
+                  x: trajectory.timestamps_s,
+                  y: trajectory.treated["zone-4"],
+                  type: "scatter", mode: "lines", name: "Close barrier @30s [C]",
+                  line: { color: "#22c55e" },
+                }] : []),
+              ]}
+              layout={{
+                paper_bgcolor: "transparent", plot_bgcolor: "transparent",
+                font: { color: "#e5e5e5" }, margin: { t: 10, r: 10, l: 40, b: 40 },
+                height: 320, xaxis: { title: "seconds" }, yaxis: { title: "risk", range: [0, 1] },
+                legend: { orientation: "h", y: -0.2 },
+              }}
+              config={{ displayModeBar: false }}
+              style={{ width: "100%" }}
+            />
+          </section>
+        )}
+
+        <section className="rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+          <h2 className="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">
+            Minimum-Causal-Cut Recommendation
+          </h2>
+
+          <ul className="space-y-2 mb-4">
+            {(liveMode ? (recommendation?.interventions ?? []) : DEMO_SCENARIO.candidates).map((c) => (
+              <li key={c.intervention_id ?? c.id} className="flex items-center justify-between rounded-lg bg-neutral-800 px-3 py-2 text-sm">
+                <span>{c.action}</span>
+                <span className="text-neutral-400 text-xs">
+                  {c.cost_category ?? c.cost} | {c.execution_time_min ? `${c.execution_time_min}min` : `${c.latency_s}s`}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <p className="text-xs text-neutral-500 mb-3">
+            This is a recommendation only. No action executes without explicit human approval.
+          </p>
+
+          {approvalStatus === null ? (
+            <div className="flex gap-2">
+              <button onClick={() => decide("APPROVE")} className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-sm font-medium">
+                [H] Approve
+              </button>
+              <button onClick={() => decide("REJECT")} className="px-4 py-2 rounded-lg bg-neutral-700 hover:bg-neutral-600 text-sm font-medium">
+                [H] Reject
+              </button>
             </div>
-          </div>
-        ))}
-      </section>
+          ) : (
+            <div className={`text-sm font-medium ${approvalStatus.decision === "APPROVE" ? "text-green-400" : "text-neutral-400"}`}>
+              {approvalStatus.decision} by {approvalStatus.approver} — audit seq #{approvalStatus.audit_seq}
+              {approvalStatus.dispatched ? " — dispatched" : ""}
+            </div>
+          )}
+        </section>
 
-      {status && <p style={{ fontSize: 13, color: "#374151" }}>{status}</p>}
-    </div>
-  );
-}
+        {auditTail.length > 0 && (
+          <section className="rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+            <h2 className="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Audit Trail (last 10)</h2>
+            <ul className="space-y-1 text-xs font-mono text-neutral-400">
+              {auditTail.map((r) => (
+                <li key={r.seq}>
+                  #{r.seq} {r.timestamp} — {r.decision} by {r.approver_id} ({r.approver_role})
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
-function Metric({ label, value, cls, good }) {
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase" }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 700, color: good === false ? "#dc2626" : good === true ? "#059669" : "#111827" }}>
-        {String(value)}{cls && <Badge cls={cls} />}
       </div>
     </div>
-  );
+  )
 }
-
-const btn = (bg) => ({ background: bg, color: "white", border: "none", borderRadius: 6, padding: "8px 14px", fontWeight: 600, cursor: "pointer" });
-const panel = () => ({ border: "1px solid #e5e7eb", borderRadius: 8, padding: 16, marginBottom: 20 });
-const h2 = () => ({ marginTop: 0, fontSize: 16, borderBottom: "1px solid #e5e7eb", paddingBottom: 8 });
