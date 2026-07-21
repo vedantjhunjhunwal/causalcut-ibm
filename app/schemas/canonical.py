@@ -18,7 +18,8 @@ import hashlib
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Any, Self
+from typing import Annotated, Any
+from typing_extensions import Self
 
 from pydantic import (
     BaseModel,
