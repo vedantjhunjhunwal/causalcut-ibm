@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useCallback, useRef } from "react"
 import Plot from "react-plotly.js"
 
-const API = "http://localhost:8001/api/v1"
+const API = "http://localhost:8010/api/v1"
 const DEV_API_KEY = "dev-key-so-a"
 const POLL_MS = 4000
 
