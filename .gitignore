@@ -10,3 +10,9 @@ dashboard/dist/
 models/
 runs/
 .DS_Store
+*.joblib
+.datasets/hydraulic/
+.datasets/ai4i/
+.datasets/*.csv
+.datasets/*.zip
+regulatory_docs/__pycache__/
