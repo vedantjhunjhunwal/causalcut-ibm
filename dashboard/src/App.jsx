@@ -1,7 +1,7 @@
-ï»¿import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import Plot from "react-plotly.js"
 
-const API = "http://localhost:8010/api/v1"
+const API = import.meta.env.VITE_API_BASE ?? "http://localhost:8000/api/v1"
 const DEV_API_KEY = "dev-key-so-a"
 const POLL_MS = 4000
 
@@ -170,7 +170,7 @@ export default function App() {
             <ul className="space-y-1 text-sm">
               {activePaths.map((p, i) => (
                 <li key={p.hyperedge_id ?? i} className="text-neutral-300">
-                  {p.hyperedge_id ?? p} {p.pathway ? `â€” ${p.pathway}` : ""}
+                  {p.hyperedge_id ?? p} {p.pathway ? `— ${p.pathway}` : ""}
                 </li>
               ))}
             </ul>
@@ -240,8 +240,8 @@ export default function App() {
             </div>
           ) : (
             <div className={`text-sm font-medium ${approvalStatus.decision === "APPROVE" ? "text-green-400" : "text-neutral-400"}`}>
-              {approvalStatus.decision} by {approvalStatus.approver} â€” audit seq #{approvalStatus.audit_seq}
-              {approvalStatus.dispatched ? " â€” dispatched" : ""}
+              {approvalStatus.decision} by {approvalStatus.approver} — audit seq #{approvalStatus.audit_seq}
+              {approvalStatus.dispatched ? " — dispatched" : ""}
             </div>
           )}
         </section>
@@ -252,7 +252,7 @@ export default function App() {
             <ul className="space-y-1 text-xs font-mono text-neutral-400">
               {auditTail.map((r) => (
                 <li key={r.seq}>
-                  #{r.seq} {r.timestamp} â€” {r.decision} by {r.approver_id} ({r.approver_role})
+                  #{r.seq} {r.timestamp} — {r.decision} by {r.approver_id} ({r.approver_role})
                 </li>
               ))}
             </ul>
