@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     api_v1_prefix: str = "/api/v1"
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:4000"]
     max_request_bytes: int = 2 * 1024 * 1024  # 2 MiB body ceiling
     request_timeout_seconds: float = 10.0
 
