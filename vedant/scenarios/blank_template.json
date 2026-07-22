@@ -1,0 +1,27 @@
+{
+  "scenario_id": "scn-example",
+  "name": "New Scenario",
+  "description": "",
+  "factory_id": "steelforge-001",
+  "safety_threshold": 0.15,
+  "zones": [
+    {
+      "zone_id": "zone-1",
+      "name": "Zone 1",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    }
+  ],
+  "zone_adjacency": [],
+  "assets": [],
+  "sensors": [],
+  "gas_readings": [],
+  "workers": [],
+  "permits": [],
+  "events": [],
+  "metadata": {},
+  "machine_readings": [],
+  "hydraulic_readings": []
+}

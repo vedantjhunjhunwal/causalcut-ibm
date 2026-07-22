@@ -1,0 +1,50 @@
+# Standalone CAUSALCUT model server.
+# Ships the trained artifacts, the FAISS index + metadata, the inference
+# modules and the FULL model dependency stack, so `docker compose up --build`
+# needs no source edits.
+FROM python:3.12-slim
+
+WORKDIR /srv
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    # Keep HF/torch caches inside the image layer, not a random home dir.
+    HF_HOME=/srv/.cache/huggingface \
+    TORCH_HOME=/srv/.cache/torch
+
+# libgomp1: LightGBM/XGBoost OpenMP. libglib/libgl: OpenCV (ultralytics).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libgomp1 curl libglib2.0-0 libgl1 \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt requirements-full.txt ./
+
+# CPU-only torch keeps the image ~2 GB instead of ~7 GB with CUDA wheels.
+RUN pip install --no-cache-dir -r requirements.txt \
+ && pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu \
+      -r requirements-full.txt
+
+# Shared service layer + routes + inference modules + trained artifacts.
+COPY app ./app
+COPY src ./src
+COPY model_server ./model_server
+COPY .models ./.models
+COPY regulatory_rag ./regulatory_rag
+
+# YOLO checkpoint is OPTIONAL: if models/ is absent the build still succeeds and
+# the vision/tracking services report unavailable at runtime rather than
+# crashing startup or fabricating detections.
+COPY --chmod=0755 docker/copy_optional_models.sh /usr/local/bin/copy_optional_models.sh
+RUN /usr/local/bin/copy_optional_models.sh || true
+
+ENV CAUSALCUT_MODEL_DEVICE=cpu \
+    CAUSALCUT_VISION_MODEL_PATH=/srv/models/yolov8_ppe.pt \
+    CAUSALCUT_RAG_INDEX_PATH=/srv/regulatory_rag/faiss_store/regulatory.index \
+    CAUSALCUT_RAG_METADATA_PATH=/srv/regulatory_rag/faiss_store/regulatory_metadata.json \
+    CAUSALCUT_RAG_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+
+EXPOSE 9000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=5 \
+  CMD curl -fsS http://localhost:9000/health || exit 1
+
+CMD ["uvicorn", "model_server.server:app", "--host", "0.0.0.0", "--port", "9000"]

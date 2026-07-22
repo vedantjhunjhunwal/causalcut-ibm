@@ -1,0 +1,51 @@
+{
+  "scenario_id": "scn-simple-gas",
+  "name": "Simple Gas Leak (Single Zone)",
+  "description": "A minimal scenario: one zone, one gas sensor spiking, one worker present. Demonstrates the pipeline with the smallest possible input.",
+  "factory_id": "demo-plant",
+  "safety_threshold": 0.15,
+  "zones": [
+    {
+      "zone_id": "zone-a",
+      "name": "Storage Bay A",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 150.0,
+      "ventilation_status": "degraded",
+      "ventilation_flow_ratio": 0.5
+    }
+  ],
+  "zone_adjacency": [],
+  "assets": [],
+  "sensors": [
+    {
+      "sensor_id": "GS-A1",
+      "zone_id": "zone-a",
+      "modality": "gas",
+      "unit": "ppm"
+    }
+  ],
+  "gas_readings": [
+    {
+      "sensor_id": "GS-A1",
+      "zone_id": "zone-a",
+      "gas_type": "ammonia",
+      "concentration_ppm": 180.0,
+      "severity": 0.7,
+      "confidence": 0.9,
+      "offset_seconds": 60
+    }
+  ],
+  "workers": [
+    {
+      "worker_id": "W-101",
+      "zone_id": "zone-a",
+      "present": true,
+      "missing_ppe": []
+    }
+  ],
+  "permits": [],
+  "events": [],
+  "metadata": {
+    "author": "sample"
+  }
+}

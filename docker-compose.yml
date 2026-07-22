@@ -1,0 +1,122 @@
+# CAUSALCUT — single-command deployment:  docker compose up --build
+#
+# Strategy: OPTION B (model-server container) is the DEFAULT. The backend calls
+# the model server over the compose network using the URLs set below — they are
+# active, not commented out. The model server owns the trained artifacts, the
+# FAISS index and the regulatory metadata.
+#
+# To switch to Option A (in-process models) instead: comment out the six
+# CAUSALCUT_*_MODEL_API_URL variables under `api`. The backend image also ships
+# the artifacts, so it works either way with no source edits.
+
+name: causalcut
+
+services:
+  # ---------------------------------------------------------------- models ---
+  model-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.modelserver
+    container_name: causalcut-model-server
+    ports:
+      - "9000:9000"
+    environment:
+      MODEL_SERVER_LOG_LEVEL: INFO
+      CAUSALCUT_MODEL_DEVICE: cpu
+      CAUSALCUT_MODEL_CONFIDENCE_THRESHOLD: "0.5"
+      # Artifact + retrieval resources (baked into the image; override to mount).
+      CAUSALCUT_MACHINE_MODEL_DIR: /srv/.models/AI4I Classifier
+      CAUSALCUT_HYDRAULIC_MODEL_DIR: /srv/.models/Hydraulic Classifier
+      CAUSALCUT_RAG_INDEX_PATH: /srv/regulatory_rag/faiss_store/regulatory.index
+      CAUSALCUT_RAG_METADATA_PATH: /srv/regulatory_rag/faiss_store/regulatory_metadata.json
+      CAUSALCUT_RAG_EMBEDDING_MODEL: sentence-transformers/all-MiniLM-L6-v2
+    volumes:
+      # Read-only artifact mounts: lets you swap in newly trained models or a
+      # rebuilt FAISS index without rebuilding the image.
+      - ./.models:/srv/.models:ro
+      - ./models:/srv/models:ro
+      - ./regulatory_rag/faiss_store:/srv/regulatory_rag/faiss_store:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    networks: [causalnet]
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------- api ---
+  api:
+    build: .
+    container_name: causalcut-api
+    ports:
+      - "8000:8000"
+    depends_on:
+      model-server:
+        condition: service_healthy
+    environment:
+      CAUSALCUT_ENVIRONMENT: dev
+      CAUSALCUT_LOG_JSON: "true"
+      CAUSALCUT_DB_PATH: /srv/data/causalcut.db
+      CAUSALCUT_AUDIT_BASE_PATH: /srv/data/audit
+      CAUSALCUT_QUEUE_CONSUMER_COUNT: "2"
+      CAUSALCUT_SAFETY_THRESHOLD: "0.15"
+      CAUSALCUT_SCENARIO_PIPELINE_TIMEOUT_S: "45.0"
+      CAUSALCUT_CORS_ORIGINS: '["http://localhost:4000", "http://localhost:5173", "http://localhost:8080"]'
+      # Production: set real operator keys and remove the built-in dev keys.
+      # CAUSALCUT_OPERATORS: "SO-A:shift_officer:CHANGE_ME,SM-01:safety_manager:CHANGE_ME"
+
+      # --- Model server wiring (ACTIVE by default) ---
+      CAUSALCUT_GAS_MODEL_API_URL: http://model-server:9000/api/v1/models/gas/predict
+      CAUSALCUT_MACHINE_MODEL_API_URL: http://model-server:9000/api/v1/models/machine-failure/predict
+      CAUSALCUT_HYDRAULIC_MODEL_API_URL: http://model-server:9000/api/v1/models/hydraulic/predict
+      CAUSALCUT_VISION_MODEL_API_URL: http://model-server:9000/api/v1/models/vision/detect
+      CAUSALCUT_TRACKING_MODEL_API_URL: http://model-server:9000/api/v1/models/tracking/update
+      CAUSALCUT_RAG_MODEL_API_URL: http://model-server:9000/api/v1/models/regulatory/verify
+      CAUSALCUT_MODEL_REQUEST_TIMEOUT_S: "30.0"
+      CAUSALCUT_MODEL_RETRY_COUNT: "2"
+      CAUSALCUT_MODEL_RETRY_BACKOFF_S: "0.5"
+    volumes:
+      # Named volume, not a bind mount: SQLite WAL on a host-mounted filesystem
+      # (esp. Docker Desktop) can lose locking guarantees.
+      - causalcut-data:/srv/data
+      - ./.models:/srv/.models:ro
+      - ./models:/srv/models:ro
+      - ./regulatory_rag/faiss_store:/srv/regulatory_rag/faiss_store:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks: [causalnet]
+    restart: unless-stopped
+
+  # ------------------------------------------------------------- dashboard ---
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        VITE_API_BASE: http://localhost:8000/api/v1
+        VITE_WS_BASE: ws://localhost:8000
+    container_name: causalcut-dashboard
+    ports:
+      - "4000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks: [causalnet]
+    restart: unless-stopped
+
+networks:
+  causalnet:
+    driver: bridge
+
+volumes:
+  causalcut-data:
