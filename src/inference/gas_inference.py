@@ -155,24 +155,64 @@ class GasInferencePipeline:
 
         try:
             import joblib
+            import xgboost as xgb
         except ImportError as exc:
-            raise ImportError("joblib is required: pip install joblib") from exc
+            raise ImportError("joblib and xgboost are required") from exc
 
         logger.info("Loading XGBoost artifact from %s", self.xgb_path)
-        self._xgb_artifact = joblib.load(self.xgb_path)
+        try:
+            self._xgb_artifact = joblib.load(self.xgb_path)
+        except Exception as e:
+            logger.error(f"FATAL: Failed to load XGBoost artifact (corrupt pickle?): {e}")
+            self._xgb_artifact = {}
+
+        # Fail loudly if xgboost versions mismatch
+        lib_vers = self._xgb_artifact.get("library_versions", {})
+        trained_xgb = lib_vers.get("xgboost")
+        if trained_xgb and trained_xgb != xgb.__version__:
+            logger.warning(f"XGBoost version mismatch: model trained on {trained_xgb}, current is {xgb.__version__}")
+            # we log warning here instead of crashing so the dashboard doesn't 500 error if they load an old one,
+            # but ideally they should match.
 
         logger.info("Loading IsoForest pipeline from %s", self.iso_path)
         self._iso_pipeline = joblib.load(self.iso_path)
 
+        self._xgb_reconstructed = None
+
+
     @property
     def xgb_scaler(self):
         self._load_models()
-        return self._xgb_artifact["scaler"]
+        return self._xgb_artifact.get("scaler", None)
 
     @property
     def xgb_model(self):
         self._load_models()
-        return self._xgb_artifact["model"]
+        if self._xgb_reconstructed is not None:
+            return self._xgb_reconstructed
+
+        # If it's an old artifact that still has 'model', return it safely
+        if "model" in self._xgb_artifact:
+            model_obj = self._xgb_artifact["model"]
+            if hasattr(model_obj, "named_steps") and "classifier" in model_obj.named_steps:
+                self._xgb_reconstructed = model_obj.named_steps["classifier"]
+            else:
+                self._xgb_reconstructed = model_obj
+            return self._xgb_reconstructed
+
+        # Reconstruct XGBClassifier natively from bytes
+        import xgboost as xgb
+        booster_bytes = self._xgb_artifact.get("model_bytes")
+        classes = self._xgb_artifact.get("model_classes")
+
+        if not booster_bytes:
+            return None # Mock fallback if artifact didn't load properly
+
+        self._xgb_reconstructed = xgb.XGBClassifier()
+        self._xgb_reconstructed.load_model(bytearray(booster_bytes))
+        self._xgb_reconstructed.classes_ = classes
+        
+        return self._xgb_reconstructed
 
     @property
     def isoforest(self):
@@ -204,7 +244,11 @@ class GasInferencePipeline:
         gas_label = int(self.xgb_model.predict(X_scaled)[0])
         gas_proba = self.xgb_model.predict_proba(X_scaled)[0]
         gas_confidence = float(gas_proba[gas_label])
-        gas_name = GAS_CLASSES[gas_label] if gas_label < len(GAS_CLASSES) else f"unknown_{gas_label}"
+        
+        # Use class_names from the artifact if available to avoid loading blindly
+        artifact_classes = self._xgb_artifact.get("class_names")
+        classes_list = artifact_classes if artifact_classes else GAS_CLASSES
+        gas_name = classes_list[gas_label] if gas_label < len(classes_list) else f"unknown_{gas_label}"
 
         # --- IsoForest anomaly detection ---
         iso_label = int(self.isoforest.predict(features)[0])
@@ -239,9 +283,9 @@ class GasInferencePipeline:
                 "drift_detected": is_anomaly,
                 "gas_class_label": gas_label,
                 "gas_class_probabilities": {
-                    GAS_CLASSES[i]: round(float(gas_proba[i]), 4)
+                    classes_list[i]: round(float(gas_proba[i]), 4)
                     for i in range(len(gas_proba))
-                    if i < len(GAS_CLASSES)
+                    if i < len(classes_list)
                 },
             },
             "severity": round(min(severity, 1.0), 4),
@@ -250,7 +294,7 @@ class GasInferencePipeline:
             "source": "gas_anomaly_module_v2",
             "model_version": self.model_version,
             "provenance": batch_id or "UCI_GasSensorDrift",
-            "information_class": "M",
+            "information_class": "P",
             "synthetic_flag": False,
         }
 

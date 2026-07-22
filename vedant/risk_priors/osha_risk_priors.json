@@ -1,0 +1,78 @@
+{
+    "metadata": {
+        "source": "OSHA Severe Injury Reports (2015-2017) & Accident Search",
+        "industry_filter": "Steel Manufacturing / Heavy Industrial",
+        "last_updated": "2026-07-20T00:00:00Z"
+    },
+    "hazard_base_rates": {
+        "toxic_gas_exposure": {
+            "base_probability": 0.012,
+            "severity_weight": 0.95,
+            "average_time_to_harm_minutes": 8.5,
+            "time_to_harm_std_dev": 3.2,
+            "common_precursors": [
+                "ventilation_failure",
+                "confined_space",
+                "hot_work"
+            ]
+        },
+        "flash_fire": {
+            "base_probability": 0.005,
+            "severity_weight": 0.99,
+            "average_time_to_harm_minutes": 2.1,
+            "time_to_harm_std_dev": 1.5,
+            "common_precursors": [
+                "flammable_gas_leak",
+                "ignition_source_present"
+            ]
+        },
+        "rotating_equipment_entanglement": {
+            "base_probability": 0.025,
+            "severity_weight": 0.85,
+            "average_time_to_harm_minutes": 5.0,
+            "time_to_harm_std_dev": 2.0,
+            "common_precursors": [
+                "missing_guard",
+                "loto_violation",
+                "loose_ppe"
+            ]
+        },
+        "hydraulic_pressure_release": {
+            "base_probability": 0.008,
+            "severity_weight": 0.88,
+            "average_time_to_harm_minutes": 12.0,
+            "time_to_harm_std_dev": 5.5,
+            "common_precursors": [
+                "valve_degradation",
+                "abnormal_pressure"
+            ]
+        }
+    },
+    "injury_type_distribution": {
+        "hospitalization": 0.7,
+        "amputation": 0.2,
+        "fatality": 0.1
+    },
+    "accident_chain_templates": [
+        {
+            "pathway_id": "AC-01",
+            "nodes": [
+                "gas_leak",
+                "ventilation_degraded",
+                "hot_work_active"
+            ],
+            "historical_frequency": 0.015,
+            "outcome": "flash_fire"
+        },
+        {
+            "pathway_id": "AC-02",
+            "nodes": [
+                "rotating_equipment_active",
+                "worker_in_zone",
+                "missing_ppe"
+            ],
+            "historical_frequency": 0.045,
+            "outcome": "entanglement"
+        }
+    ]
+}

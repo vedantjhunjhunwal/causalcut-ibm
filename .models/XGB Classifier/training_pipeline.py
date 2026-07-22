@@ -112,6 +112,10 @@ def train_optimize_and_export_pipeline(
     # 7. Construct the artifact payload — includes provenance and library
     #    pins so a version mismatch fails loudly at load time instead of
     #    surfacing as a silent bad prediction or a pickle error later.
+    #    FIX: Save the booster natively to avoid unpickling errors across versions.
+    booster = fitted_model.get_booster()
+    booster_bytes = booster.save_raw("ubj")
+
     artifact_payload = {
         "version": version_name,
         "trained_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -125,8 +129,10 @@ def train_optimize_and_export_pipeline(
             "sklearn": sklearn.__version__,
         },
         "scaler": fitted_scaler,
-        "model": fitted_model,
+        "model_bytes": booster_bytes,
+        "model_classes": fitted_model.classes_,
     }
+
 
     # 8. Serialize
     joblib.dump(artifact_payload, export_path)

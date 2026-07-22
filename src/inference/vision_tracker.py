@@ -302,6 +302,59 @@ class VisionTracker:
 
         return workers
 
+    def update(self, detections: list[dict]) -> list[dict]:
+        """Update tracker with raw detection dicts and return active tracks."""
+        if not detections:
+            return []
+        tracker = self._ensure_tracker()
+        import supervision as sv
+
+        from collections import defaultdict
+        frames = defaultdict(list)
+        for d in detections:
+            f_id = d.get("frame_id", 0)
+            frames[f_id].append(d)
+
+        out = []
+        for f_id in sorted(frames.keys()):
+            boxes = []
+            confs = []
+            cls_ids = []
+            for d in frames[f_id]:
+                bbox = d.get("bbox") or [0, 0, 0, 0]
+                if len(bbox) == 4:
+                    x, y, w, h = bbox
+                    if w > x and h > y:  # xyxy
+                        xyxy = [x, y, w, h]
+                    else:  # xywh
+                        xyxy = [x, y, x + w, y + h]
+                else:
+                    xyxy = [0, 0, 0, 0]
+                boxes.append(xyxy)
+                confs.append(float(d.get("confidence", 0.9)))
+                cls_ids.append(0)
+
+            if len(boxes) == 0:
+                continue
+
+            sv_detections = sv.Detections(
+                xyxy=np.array(boxes, dtype=np.float32),
+                confidence=np.array(confs, dtype=np.float32),
+                class_id=np.array(cls_ids, dtype=int),
+            )
+            tracked = tracker.update_with_detections(sv_detections)
+            for i in range(len(tracked)):
+                track_id = int(tracked.tracker_id[i]) if tracked.tracker_id is not None else i
+                out.append({
+                    "frame_id": f_id,
+                    "track_id": track_id,
+                    "worker_id": self._get_worker_id(track_id),
+                    "bbox": tracked.xyxy[i].tolist(),
+                    "confidence": float(tracked.confidence[i]) if tracked.confidence is not None else 0.5,
+                })
+        return out
+
+
     def reset(self) -> None:
         """Reset tracker state (e.g. on camera switch)."""
         self._tracker = None

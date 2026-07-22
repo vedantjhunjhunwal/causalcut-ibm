@@ -1,0 +1,114 @@
+{
+  "scenario_id": "scn-coke-oven",
+  "name": "Coke Oven Flash-Fire (Design Doc \u00a78)",
+  "description": "Canonical Steelforge coke-oven incident: rising ammonia + active hot-work permit PTW-007 + missing helmet on W-003 + degraded ventilation -> HE-042 flash-fire pathway.",
+  "factory_id": "steelforge-001",
+  "safety_threshold": 0.15,
+  "zones": [
+    {
+      "zone_id": "zone-1",
+      "name": "Coke Oven",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "degraded",
+      "ventilation_flow_ratio": 0.55
+    },
+    {
+      "zone_id": "zone-2",
+      "name": "Blast Furnace",
+      "hazard_class": "high_risk",
+      "baseline_gas_threshold_ppm": 350.0
+    },
+    {
+      "zone_id": "zone-4",
+      "name": "Shared Utilities",
+      "hazard_class": "propagation",
+      "baseline_gas_threshold_ppm": 500.0
+    }
+  ],
+  "zone_adjacency": [
+    {
+      "zone_a": "zone-1",
+      "zone_b": "zone-4",
+      "medium": "ventilation_duct"
+    },
+    {
+      "zone_a": "zone-2",
+      "zone_b": "zone-4",
+      "medium": "ventilation_duct"
+    },
+    {
+      "zone_a": "zone-1",
+      "zone_b": "zone-2",
+      "medium": "shared_duct"
+    }
+  ],
+  "assets": [],
+  "sensors": [
+    {
+      "sensor_id": "GS-03",
+      "zone_id": "zone-1",
+      "modality": "gas",
+      "unit": "ppm"
+    },
+    {
+      "sensor_id": "VENT-01",
+      "zone_id": "zone-1",
+      "modality": "airflow",
+      "unit": "ratio"
+    }
+  ],
+  "gas_readings": [
+    {
+      "sensor_id": "GS-03",
+      "zone_id": "zone-1",
+      "gas_type": "ammonia",
+      "concentration_ppm": 180.0,
+      "severity": 0.38,
+      "confidence": 0.9,
+      "offset_seconds": 180
+    },
+    {
+      "sensor_id": "GS-03",
+      "zone_id": "zone-1",
+      "gas_type": "ammonia",
+      "concentration_ppm": 215.0,
+      "severity": 0.82,
+      "confidence": 0.91,
+      "offset_seconds": 450
+    }
+  ],
+  "workers": [
+    {
+      "worker_id": "W-001",
+      "zone_id": "zone-1",
+      "present": true,
+      "missing_ppe": []
+    },
+    {
+      "worker_id": "W-003",
+      "zone_id": "zone-1",
+      "present": true,
+      "missing_ppe": [
+        "hard_hat"
+      ]
+    }
+  ],
+  "permits": [
+    {
+      "permit_id": "PTW-007",
+      "zone_id": "zone-1",
+      "permit_type": "hot_work",
+      "status": "active",
+      "worker_id": "W-001"
+    }
+  ],
+  "events": [],
+  "metadata": {
+    "source": "design_doc_section_8",
+    "expected_cut": [
+      "Suspend PTW-007",
+      "Evacuate W-003"
+    ]
+  }
+}

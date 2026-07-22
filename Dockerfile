@@ -9,16 +9,27 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /srv
 
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+      libgomp1 && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd -r causalcut && useradd -r -g causalcut causalcut
 
 # Dependencies first for layer caching. ortools/networkx are the analytical
 # half; everything else is the ingestion spine.
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements-full.txt ./
+RUN pip install --no-cache-dir -r requirements.txt \
+ && pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-full.txt
 
+# Application code
 COPY app ./app
 COPY scripts ./scripts
 COPY scenarios ./scenarios
+
+# Inference modules + trained model artifacts for in-process mode
+COPY src ./src
+COPY .models ./.models
+COPY regulatory_rag ./regulatory_rag
+COPY realtime ./realtime
 
 # Durable state: SQLite plant-state store + write-ahead audit log both live here.
 RUN mkdir -p /srv/data/audit && chown -R causalcut:causalcut /srv
