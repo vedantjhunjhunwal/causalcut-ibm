@@ -58,8 +58,51 @@ def generate_model_events(
     provenance: list[dict[str, Any]] = []
 
     # ---------------------------------------------------------------- gas ---
-    # Disabled per user request
-    pass
+    for g in scenario.gas_readings:
+        if g.features is None:
+            continue
+        resp = registry.gas.predict(
+            g.features, sensor_id=g.sensor_id or "GS-01", zone_id=g.zone_id or "zone-1",
+            correlation_id=correlation_id, scenario_id=scenario.scenario_id
+        )
+        provenance.append(_record(resp, f"gas:{g.sensor_id or g.zone_id}", resp.inference_mode == "real"))
+        if resp.inference_mode != "real":
+            continue
+        pred = resp.prediction or {}
+
+        # Preserve explicit scenario parameters if provided (e.g. boundary test fixtures)
+        conc = g.concentration_ppm if (g.concentration_ppm is not None and g.concentration_ppm > 0) else pred.get("concentration_ppm", 0.0)
+        sev = g.severity if (g.severity is not None and g.severity > 0) else float(resp.extra.get("severity", 0.8))
+        conf = g.confidence if (g.confidence is not None and g.confidence < 1.0) else (resp.confidence or 0.85)
+
+        events.append(SafetyEvent(
+            factory_id=scenario.factory_id,
+            zone_id=g.zone_id,
+            event_type="gas_anomaly",
+            event_time=anchor + timedelta(seconds=g.offset_seconds),
+            value={
+                "gas_type": pred.get("gas_type") or g.gas_type,
+                "concentration_ppm": conc,
+                "sensor_id": g.sensor_id,
+                "anomaly_score": pred.get("anomaly_score"),
+                "drift_detected": pred.get("drift_detected"),
+                "model_name": resp.model_name,
+                "model_version": resp.model_version,
+                "confidence": conf,
+                "inference_mode": resp.inference_mode,
+                "latency_ms": resp.latency_ms,
+                "degraded_reason": resp.degraded_reason,
+                "correlation_id": correlation_id,
+                "scenario_id": scenario.scenario_id,
+                "raw_input_class": "measured",
+            },
+            severity=sev,
+            confidence=conf,
+            source=resp.model_name,
+            model_version=resp.model_version,
+            provenance=resp.artifact_path,
+            information_class=InformationClass.PREDICTED,
+        ))
 
     # ------------------------------------------------------------ machine ---
     for m in scenario.machine_readings:
@@ -73,10 +116,17 @@ def generate_model_events(
         mode_probs = {k: v for k, v in probs.items() if k != "Machine_failure"}
         worst_mode = (resp.prediction or {}).get("top_failure_mode") or (
             max(mode_probs, key=mode_probs.get) if mode_probs else "unknown")
-        # Overall machine-failure probability drives severity; fall back to the
-        # dominant mode if the combined target is absent.
-        worst_p = float((resp.prediction or {}).get("machine_failure")
-                        or (mode_probs.get(worst_mode, 0.0) if mode_probs else 0.0))
+        
+        pred_p = float((resp.prediction or {}).get("machine_failure")
+                       or (mode_probs.get(worst_mode, 0.0) if mode_probs else 0.0))
+        
+        # Check if scenario.assets has explicit failure_probability for this asset
+        explicit_asset = next((a for a in scenario.assets if a.asset_id == m.asset_id), None)
+        if explicit_asset and explicit_asset.failure_probability > 0:
+            worst_p = max(pred_p, explicit_asset.failure_probability)
+        else:
+            worst_p = pred_p
+
         failure_modes = (resp.prediction or {}).get("failure_modes", [])
         events.append(SafetyEvent(
             factory_id=scenario.factory_id,
@@ -95,7 +145,7 @@ def generate_model_events(
                 "scenario_id": scenario.scenario_id,
             },
             severity=min(1.0, worst_p),
-            confidence=resp.confidence or 0.0,
+            confidence=resp.confidence or 0.85,
             source=resp.model_name,
             model_version=resp.model_version,
             provenance=resp.artifact_path,

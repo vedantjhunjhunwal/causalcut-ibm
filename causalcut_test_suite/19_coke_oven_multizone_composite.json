@@ -1,0 +1,176 @@
+{
+  "scenario_id": "test-19_coke_oven_multizone_composite",
+  "name": "Coke Oven Multi-Zone Composite Hazard",
+  "description": "Multi-zone composite incident test with elevated methane release, high-stress compressor failure, degraded ventilation, active hot-work permit, and exposed workers in battery and gallery zones.",
+  "factory_id": "steelforge-001",
+  "safety_threshold": 0.15,
+  "zones": [
+    {
+      "zone_id": "zone-coke-battery",
+      "name": "Coke Oven Battery #4",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 100.0,
+      "ventilation_status": "degraded",
+      "ventilation_flow_ratio": 0.40
+    },
+    {
+      "zone_id": "zone-byproduct-gallery",
+      "name": "Byproduct Recovery Gallery",
+      "hazard_class": "propagation",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "failed",
+      "ventilation_flow_ratio": 0.25
+    },
+    {
+      "zone_id": "zone-control-center",
+      "name": "East Control Center",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 500.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    }
+  ],
+  "zone_adjacency": [
+    {
+      "zone_a": "zone-coke-battery",
+      "zone_b": "zone-byproduct-gallery",
+      "medium": "pipe_gallery"
+    },
+    {
+      "zone_a": "zone-byproduct-gallery",
+      "zone_b": "zone-control-center",
+      "medium": "airlock_corridor"
+    }
+  ],
+  "sensors": [
+    {
+      "sensor_id": "GS-CB-01",
+      "zone_id": "zone-coke-battery",
+      "modality": "gas",
+      "unit": "ppm"
+    },
+    {
+      "sensor_id": "GS-BG-02",
+      "zone_id": "zone-byproduct-gallery",
+      "modality": "gas",
+      "unit": "ppm"
+    },
+    {
+      "sensor_id": "VIB-CB-09",
+      "zone_id": "zone-coke-battery",
+      "modality": "vibration",
+      "unit": "mm_s"
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "COMP-CB-09",
+      "zone_id": "zone-coke-battery",
+      "asset_type": "gas_compressor",
+      "failure_probability": 0.94,
+      "condition": "bearing_overheat_severe"
+    },
+    {
+      "asset_id": "PUMP-BG-02",
+      "zone_id": "zone-byproduct-gallery",
+      "asset_type": "tar_slurry_pump",
+      "failure_probability": 0.38,
+      "condition": "vibration_nominal"
+    }
+  ],
+  "gas_readings": [
+    {
+      "sensor_id": "GS-CB-01",
+      "zone_id": "zone-coke-battery",
+      "gas_type": "methane",
+      "concentration_ppm": 350.0,
+      "severity": 0.88,
+      "confidence": 0.95,
+      "offset_seconds": 0
+    }
+  ],
+  "machine_readings": [
+    {
+      "asset_id": "COMP-CB-09",
+      "zone_id": "zone-coke-battery",
+      "Air_temperature": 345.0,
+      "Process_temperature": 375.0,
+      "Rotational_speed": 2600.0,
+      "Torque": 68.0,
+      "Tool_wear": 240.0,
+      "offset_seconds": 0
+    }
+  ],
+  "hydraulic_readings": [],
+  "vision_inputs": [],
+  "tracking_inputs": [
+    {
+      "zone_id": "zone-coke-battery",
+      "detections": [
+        {
+          "frame_id": 101,
+          "bbox": [120.0, 45.0, 75.0, 160.0],
+          "class": "person",
+          "confidence": 0.95,
+          "track_id": 1
+        },
+        {
+          "frame_id": 101,
+          "bbox": [280.0, 50.0, 70.0, 165.0],
+          "class": "person",
+          "confidence": 0.92,
+          "track_id": 2
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "worker_id": "W-DEV-01",
+      "zone_id": "zone-coke-battery",
+      "present": true,
+      "missing_ppe": ["gas_detector", "flame_resistant_suit"]
+    },
+    {
+      "worker_id": "W-DEV-02",
+      "zone_id": "zone-coke-battery",
+      "present": true,
+      "missing_ppe": []
+    },
+    {
+      "worker_id": "W-DEV-03",
+      "zone_id": "zone-byproduct-gallery",
+      "present": true,
+      "missing_ppe": ["respirator"]
+    },
+    {
+      "worker_id": "W-DEV-04",
+      "zone_id": "zone-control-center",
+      "present": true,
+      "missing_ppe": []
+    }
+  ],
+  "permits": [
+    {
+      "permit_id": "PTW-HOT-501",
+      "zone_id": "zone-coke-battery",
+      "permit_type": "hot_work",
+      "status": "active",
+      "worker_id": "W-DEV-02"
+    }
+  ],
+  "events": [],
+  "metadata": {
+    "purpose": "causalcut_behavioral_test",
+    "expected_checks": [
+      "elevated gas release in battery zone triggers containment loss and flash fire risk",
+      "active hot work permit PTW-HOT-501 identified as ignition source",
+      "high failure probability on COMP-CB-09 triggers machine trip intervention",
+      "unprotected worker W-DEV-01 identified and flagged for PPE enforcement",
+      "failed ventilation in byproduct gallery triggers ventilation override recommendation"
+    ],
+    "created_for": "CAUSALCUT verification testing",
+    "test_case": "19_coke_oven_multizone_composite"
+  },
+  "schema_version": "1.0.0"
+}

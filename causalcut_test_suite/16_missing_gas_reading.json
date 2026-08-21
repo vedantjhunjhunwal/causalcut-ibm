@@ -1,0 +1,376 @@
+{
+  "scenario_id": "test-16_missing_gas_reading",
+  "name": "Missing Gas Reading",
+  "description": "CAUSALCUT behavioral test case: Missing Gas Reading.",
+  "factory_id": "northstar-alloys-plant-7",
+  "safety_threshold": 0.12,
+  "zones": [
+    {
+      "zone_id": "zone-boiler-house",
+      "name": "Boiler House",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 100.0,
+      "ventilation_status": "degraded",
+      "ventilation_flow_ratio": 0.41
+    },
+    {
+      "zone_id": "zone-feedwater-gallery",
+      "name": "Feedwater Gallery",
+      "hazard_class": "propagation",
+      "baseline_gas_threshold_ppm": 220.0,
+      "ventilation_status": "degraded",
+      "ventilation_flow_ratio": 0.63
+    },
+    {
+      "zone_id": "zone-control-west",
+      "name": "West Control Room",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 500.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    }
+  ],
+  "zone_adjacency": [
+    {
+      "zone_a": "zone-boiler-house",
+      "zone_b": "zone-feedwater-gallery",
+      "medium": "service_corridor"
+    },
+    {
+      "zone_a": "zone-feedwater-gallery",
+      "zone_b": "zone-control-west",
+      "medium": "air_return_duct"
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "PUMP-BF-12",
+      "zone_id": "zone-boiler-house",
+      "asset_type": "boiler_feed_pump",
+      "failure_probability": 0.68,
+      "condition": "bearing_overheat_pressure_fluctuation"
+    },
+    {
+      "asset_id": "VENT-BH-04",
+      "zone_id": "zone-boiler-house",
+      "asset_type": "extraction_fan",
+      "failure_probability": 0.72,
+      "condition": "reduced_flow"
+    }
+  ],
+  "sensors": [
+    {
+      "sensor_id": "GS-MET-12",
+      "zone_id": "zone-boiler-house",
+      "modality": "gas_array",
+      "unit": "model_features"
+    },
+    {
+      "sensor_id": "HYD-FG-03",
+      "zone_id": "zone-feedwater-gallery",
+      "modality": "hydraulic",
+      "unit": "multi_sensor_cycle"
+    },
+    {
+      "sensor_id": "VIB-B12",
+      "zone_id": "zone-boiler-house",
+      "modality": "vibration",
+      "unit": "mm_s"
+    }
+  ],
+  "gas_readings": [],
+  "machine_readings": [
+    {
+      "asset_id": "PUMP-BF-12",
+      "zone_id": "zone-boiler-house",
+      "Type": "H",
+      "Air_temperature": 306.7,
+      "Process_temperature": 321.4,
+      "Rotational_speed": 2940.0,
+      "Torque": 63.8,
+      "Tool_wear": 218.0,
+      "offset_seconds": 390
+    }
+  ],
+  "hydraulic_readings": [
+    {
+      "zone_id": "zone-feedwater-gallery",
+      "sensor_data": {
+        "PS1": [
+          154.2,
+          153.71,
+          152.93,
+          151.88,
+          150.76,
+          149.91,
+          149.44,
+          149.83,
+          150.62,
+          151.57
+        ],
+        "PS2": [
+          129.42,
+          128.93,
+          128.21,
+          127.34,
+          126.61,
+          126.18,
+          126.29,
+          126.82,
+          127.57,
+          128.31
+        ],
+        "PS3": [
+          3.42,
+          3.38,
+          3.31,
+          3.25,
+          3.23,
+          3.27,
+          3.34,
+          3.4,
+          3.44,
+          3.46
+        ],
+        "PS4": [
+          2.91,
+          2.88,
+          2.84,
+          2.82,
+          2.84,
+          2.88,
+          2.92,
+          2.95,
+          2.94,
+          2.91
+        ],
+        "PS5": [
+          9.41,
+          9.46,
+          9.52,
+          9.61,
+          9.68,
+          9.7,
+          9.66,
+          9.58,
+          9.49,
+          9.43
+        ],
+        "PS6": [
+          8.71,
+          8.78,
+          8.86,
+          8.94,
+          8.98,
+          8.95,
+          8.88,
+          8.8,
+          8.74,
+          8.7
+        ],
+        "EPS1": [
+          2488.21,
+          2497.34,
+          2504.18,
+          2499.73,
+          2487.56,
+          2472.91,
+          2465.42,
+          2470.31,
+          2481.84,
+          2491.65
+        ],
+        "FS1": [
+          6.42,
+          6.38,
+          6.31,
+          6.22,
+          6.16,
+          6.15,
+          6.19,
+          6.27,
+          6.35,
+          6.41
+        ],
+        "FS2": [
+          8.72,
+          8.66,
+          8.57,
+          8.49,
+          8.46,
+          8.49,
+          8.56,
+          8.65,
+          8.73,
+          8.77
+        ],
+        "TS1": [
+          43.18,
+          42.91,
+          42.77,
+          42.84,
+          43.11,
+          43.49,
+          43.77,
+          43.82,
+          43.61,
+          43.31
+        ],
+        "TS2": [
+          47.82,
+          47.91,
+          48.16,
+          48.54,
+          48.91,
+          49.08,
+          48.97,
+          48.66,
+          48.24,
+          47.91
+        ],
+        "TS3": [
+          45.52,
+          45.83,
+          46.17,
+          46.43,
+          46.51,
+          46.39,
+          46.11,
+          45.78,
+          45.54,
+          45.41
+        ],
+        "TS4": [
+          44.21,
+          44.53,
+          44.71,
+          44.66,
+          44.39,
+          44.02,
+          43.73,
+          43.61,
+          43.72,
+          44.01
+        ],
+        "VS1": [
+          0.681,
+          0.674,
+          0.661,
+          0.647,
+          0.638,
+          0.642,
+          0.653,
+          0.667,
+          0.679,
+          0.684
+        ],
+        "CE": [
+          40.12,
+          39.81,
+          39.43,
+          39.09,
+          38.94,
+          39.02,
+          39.31,
+          39.67,
+          39.98,
+          40.16
+        ],
+        "CP": [
+          2.14,
+          2.11,
+          2.08,
+          2.07,
+          2.09,
+          2.13,
+          2.17,
+          2.19,
+          2.18,
+          2.15
+        ],
+        "SE": [
+          61.14,
+          60.83,
+          60.92,
+          61.38,
+          61.94,
+          62.31,
+          62.17,
+          61.71,
+          61.23,
+          60.94
+        ]
+      },
+      "offset_seconds": 360
+    }
+  ],
+  "vision_inputs": [],
+  "tracking_inputs": [
+    {
+      "zone_id": "zone-boiler-house",
+      "offset_seconds": 405,
+      "detections": [
+        {
+          "frame_id": 208,
+          "bbox": [
+            124.0,
+            69.0,
+            91.0,
+            188.0
+          ],
+          "class": "person",
+          "confidence": 0.97,
+          "track_id": 31
+        },
+        {
+          "frame_id": 208,
+          "bbox": [
+            356.0,
+            88.0,
+            82.0,
+            179.0
+          ],
+          "class": "person",
+          "confidence": 0.91,
+          "track_id": 36
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "worker_id": "W-B31",
+      "zone_id": "zone-boiler-house",
+      "present": true,
+      "missing_ppe": [
+        "gas_detector"
+      ]
+    },
+    {
+      "worker_id": "W-B36",
+      "zone_id": "zone-feedwater-gallery",
+      "present": true,
+      "missing_ppe": []
+    }
+  ],
+  "permits": [
+    {
+      "permit_id": "PTW-BH-204",
+      "zone_id": "zone-boiler-house",
+      "permit_type": "electrical_maintenance",
+      "status": "active",
+      "worker_id": "W-B36"
+    }
+  ],
+  "events": [],
+  "metadata": {
+    "purpose": "causalcut_behavioral_test",
+    "expected_checks": [
+      "system should fail gracefully or mark gas inference unavailable",
+      "must not fabricate gas risk"
+    ],
+    "created_for": "CAUSALCUT judge/demo testing",
+    "test_case": "16_missing_gas_reading"
+  },
+  "schema_version": "1.0.0"
+}

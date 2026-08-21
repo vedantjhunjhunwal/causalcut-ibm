@@ -39,7 +39,7 @@ _DISRUPTION = {"MINIMAL": 1, "LOW": 2, "MEDIUM": 5, "HIGH": 12}
 W_COST = 1
 W_DISRUPTION = 2
 W_LATENCY = 1
-W_CARDINALITY = 3
+W_CARDINALITY = 4
 
 
 @dataclass
@@ -231,7 +231,7 @@ class MinimumCausalCutOptimiser:
             return 0.0
         open_routes = 0
         remaining_hazard: set[str] = set()
-        hazard_sources = {"gas_source", "ignition_source", "equipment_hazard"}
+        hazard_sources = {"gas_source", "ignition_source", "equipment_hazard", "ventilation_deficit", "unprotected_worker"}
         covered = set().union(*(c.breaks_factors for c in chosen)) if chosen else set()
 
         for _, necessary in sub_pathways:

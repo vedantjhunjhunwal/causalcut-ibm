@@ -159,6 +159,13 @@ class Worker(BaseModel):
     present: bool = True
     missing_ppe: list[str] = Field(default_factory=list)
 
+    @field_validator("present", mode="before")
+    @classmethod
+    def _validate_present(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            raise TypeError("Worker.present must be a boolean, not a string")
+        return v
+
 
 class Permit(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -167,6 +174,17 @@ class Permit(BaseModel):
     permit_type: str = "hot_work"
     status: Literal["active", "suspended", "closed", "expired"] = "active"
     worker_id: str | None = None
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _normalize_status(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v_low = v.strip().lower()
+            if v_low in ("active", "suspended", "closed", "expired"):
+                return v_low
+            if v_low == "inactive":
+                return "closed"
+        return v
 
 
 class ScenarioEvent(BaseModel):
@@ -197,6 +215,23 @@ class Scenario(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = ""
     factory_id: str = "steelforge-001"
+    safety_threshold: float = Field(default=0.15, ge=0.0, le=1.0)
+
+    @field_validator("safety_threshold", mode="before")
+    @classmethod
+    def _validate_safety_threshold(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            raise TypeError("safety_threshold must be a float, not a string")
+        return v
+
+    @model_validator(mode="before")
+    @classmethod
+    def _check_scenario_id(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "schema_version" in data or "metadata" in data:
+                if "scenario_id" not in data or data.get("scenario_id") is None:
+                    raise ValueError("Field 'scenario_id' is required")
+        return data
     # Anchor for event offsets. If omitted, the timeline is rebased so its LAST
     # event lands at "now" — a scenario describes a sequence leading up to the
     # present, not one starting now. Without this, positive offsets would place

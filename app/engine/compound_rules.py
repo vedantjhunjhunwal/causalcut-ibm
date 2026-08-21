@@ -90,7 +90,7 @@ def worker_missing_ppe() -> PredicateFn:
         satisfied = bool(offenders)
         return ConditionResult(
             node=offenders[0] if offenders else f"{zone_id}:worker",
-            predicate="worker present without required PPE",
+            predicate=f"{len(offenders)} worker(s) present without required PPE",
             satisfied=satisfied,
             info_class=InformationClass.MEASURED,
             observed_value=offenders,
@@ -143,19 +143,25 @@ def barrier_down(barrier_type: str) -> PredicateFn:
     return _pred
 
 
-def equipment_failing(threshold: float = 0.6) -> PredicateFn:
+def equipment_failing(threshold: float = 0.5) -> PredicateFn:
     def _pred(g: SafetyHypergraph, zone_id: str) -> ConditionResult:
-        assets = [
-            a for a in g.predecessors(zone_id, "in_zone")
-            if g.node(a).get("node_type") == "asset"
-        ]
-        failing = [a for a in assets if (g.node(a).get("failure_probability") or 0) >= threshold]
+        assets = sorted(
+            [
+                a for a in g.predecessors(zone_id, "in_zone")
+                if g.node(a).get("node_type") == "asset"
+            ],
+            key=lambda a: g.node(a).get("failure_probability", 0.0),
+            reverse=True,
+        )
+        failing = [a for a in assets if (g.node(a).get("failure_probability") or 0.0) >= threshold]
+        max_fp = max((g.node(a).get("failure_probability") or 0.0 for a in assets), default=0.0)
+        worst_asset = failing[0] if failing else (assets[0] if assets else f"{zone_id}:asset")
         return ConditionResult(
-            node=failing[0] if failing else f"{zone_id}:asset",
-            predicate=f"asset failure_probability >= {threshold}",
+            node=worst_asset,
+            predicate=f"asset {worst_asset} failure_probability >= {threshold}",
             satisfied=bool(failing),
             info_class=InformationClass.PREDICTED,
-            observed_value=failing,
+            observed_value=max_fp,
         )
     return _pred
 
@@ -170,6 +176,60 @@ def weighted_severity(base: float, per_condition: float = 0.06) -> SeverityFn:
     return _sev
 
 
+def dynamic_gas_severity(base: float = 0.65) -> SeverityFn:
+    def _sev(conds: list[ConditionResult]) -> float:
+        ppm = 0.0
+        limit = 200.0
+        for c in conds:
+            if "gas_ppm" in c.predicate and isinstance(c.observed_value, (int, float)):
+                ppm = float(c.observed_value)
+                try:
+                    limit = float(c.predicate.split(">")[-1].strip())
+                except Exception:
+                    limit = 200.0
+        gas_ratio = max(1.0, ppm / limit) if limit > 0 else 1.0
+        extra_sev = min(0.25, (gas_ratio - 1.0) * 0.10)
+        
+        # Check PPE compliance of workers in zone
+        violating_count = 0
+        has_workers = False
+        for c in conds:
+            if "without required PPE" in c.predicate and isinstance(c.observed_value, list):
+                violating_count += len(c.observed_value)
+            if "worker present" in c.predicate and c.satisfied:
+                has_workers = True
+        
+        # Count-weighted exposure penalty for unprotected workers
+        ppe_penalty = violating_count * 0.03
+        # If all workers are fully compliant, give a 0.05 safety credit
+        ppe_credit = 0.05 if (has_workers and violating_count == 0) else 0.0
+        
+        n = sum(1 for c in conds if c.satisfied)
+        return max(0.40, min(0.99, base + extra_sev + ppe_penalty - ppe_credit + 0.04 * max(0, n - 2)))
+    return _sev
+
+
+def dynamic_asset_severity(base: float = 0.55) -> SeverityFn:
+    def _sev(conds: list[ConditionResult]) -> float:
+        max_fp = 0.0
+        for c in conds:
+            if "failure_probability" in c.predicate and isinstance(c.observed_value, (int, float)):
+                max_fp = max(max_fp, float(c.observed_value))
+        return max(base, min(0.99, max_fp))
+    return _sev
+
+
+def dynamic_ventilation_severity(base: float = 0.50) -> SeverityFn:
+    def _sev(conds: list[ConditionResult]) -> float:
+        flow = 1.0
+        for c in conds:
+            if "ventilation_flow" in c.predicate and isinstance(c.observed_value, (int, float)):
+                flow = min(flow, float(c.observed_value))
+        flow_deficit = max(0.0, 1.0 - flow)
+        return min(0.95, base + flow_deficit * 0.4)
+    return _sev
+
+
 # --------------------------------------------------------------------------- #
 # Rule definition
 # --------------------------------------------------------------------------- #
@@ -180,11 +240,7 @@ class CompoundRule:
     pathway: str
     predicates: list[PredicateFn]
     severity_fn: SeverityFn
-    # Predicates that MUST all hold for the edge to fire (e.g. a flash-fire
-    # pathway genuinely requires elevated gas -- permit+PPE alone is not one).
     mandatory: list[PredicateFn] = field(default_factory=list)
-    # Of the (optional) contributing predicates, how many must hold. Default:
-    # all of them. Mandatory predicates are always additionally required.
     min_satisfied: int | None = None
     applies_to_hazard_classes: tuple[str, ...] = ()  # empty => all zones
 
@@ -198,7 +254,6 @@ class CompoundRule:
         results = mandatory_results + contributing
         satisfied = [r for r in results if r.satisfied]
         need = self.min_satisfied if self.min_satisfied is not None else len(self.predicates)
-        # min_satisfied counts contributing predicates only.
         if sum(1 for r in contributing if r.satisfied) < need:
             return None
 
@@ -240,9 +295,6 @@ class CompoundRuleEngine:
         # HE-042: the canonical coke-oven flash-fire / toxic-exposure pathway.
         self.add_rule(
             CompoundRule(
-                # HE-042 is the CANONICAL identifier used by the design doc,
-                # the API, the graph, the dashboard, tests and the audit log.
-                # "HE-FLASHFIRE" is retained as a descriptive alias only.
                 template_id="HE-042",
                 name="HE-FLASHFIRE — toxic gas + hot work + missing PPE + degraded ventilation",
                 pathway="toxic_exposure_or_flash_fire",
@@ -253,23 +305,37 @@ class CompoundRuleEngine:
                     ventilation_degraded(0.6),
                     worker_present(),
                 ],
-                severity_fn=weighted_severity(0.80),
+                severity_fn=dynamic_gas_severity(0.80),
                 min_satisfied=2,  # gas (mandatory) + any two worker/ignition factors
             )
         )
-        # HE-TOXIC: toxic accumulation with a worker present, ventilation failing.
+        # HE-TOXIC: toxic accumulation with a worker present in the zone.
         self.add_rule(
             CompoundRule(
                 template_id="HE-TOXIC-EXPOSURE",
-                name="Toxic gas accumulation with worker present + poor ventilation",
+                name="Toxic gas accumulation with worker present in zone",
                 pathway="acute_toxic_exposure",
+                mandatory=[rising_gas(), worker_present()],
+                predicates=[
+                    ventilation_degraded(0.7),
+                    worker_missing_ppe(),
+                ],
+                severity_fn=dynamic_gas_severity(0.68),
+                min_satisfied=0,
+            )
+        )
+        # HE-GAS: gas accumulation hazard in plant zone (active even with 0 workers).
+        self.add_rule(
+            CompoundRule(
+                template_id="HE-GAS-ACCUMULATION",
+                name="Atmospheric gas concentration exceeding safety threshold",
+                pathway="gas_accumulation",
                 mandatory=[rising_gas()],
                 predicates=[
-                    worker_present(),
                     ventilation_degraded(0.7),
                 ],
-                severity_fn=weighted_severity(0.65),
-                min_satisfied=2,
+                severity_fn=dynamic_gas_severity(0.55),
+                min_satisfied=0,
             )
         )
         # HE-IGNITION: hot work with fire suppression barrier down.
@@ -278,7 +344,7 @@ class CompoundRuleEngine:
                 template_id="HE-IGNITION-UNGUARDED",
                 name="Hot work with fire suppression offline and rising gas",
                 pathway="uncontrolled_ignition",
-                mandatory=[active_permit("hot_work")],  # ignition source is the premise
+                mandatory=[active_permit("hot_work")],
                 predicates=[
                     barrier_down("fire_suppression"),
                     rising_gas(),
@@ -293,12 +359,46 @@ class CompoundRuleEngine:
                 template_id="HE-MECH-EXPOSURE",
                 name="Rotating equipment failure imminent with worker present",
                 pathway="mechanical_injury",
-                mandatory=[equipment_failing(0.6)],
-                predicates=[
-                    worker_present(),
-                ],
-                severity_fn=weighted_severity(0.60),
-                min_satisfied=1,
+                mandatory=[equipment_failing(0.5), worker_present()],
+                predicates=[],
+                severity_fn=dynamic_asset_severity(0.65),
+                min_satisfied=0,
+            )
+        )
+        # HE-EQUIPMENT-FAILURE: failing asset in facility (active even with 0 workers).
+        self.add_rule(
+            CompoundRule(
+                template_id="HE-EQUIPMENT-FAILURE",
+                name="Critical asset failure probability exceeding safety threshold",
+                pathway="equipment_hazard",
+                mandatory=[equipment_failing(0.5)],
+                predicates=[],
+                severity_fn=dynamic_asset_severity(0.55),
+                min_satisfied=0,
+            )
+        )
+        # HE-VENT: ventilation failure with worker present in zone.
+        self.add_rule(
+            CompoundRule(
+                template_id="HE-VENTILATION-FAILURE",
+                name="Critical ventilation fan failure in active worker zone",
+                pathway="ventilation_starvation",
+                mandatory=[ventilation_degraded(0.4), worker_present()],
+                predicates=[],
+                severity_fn=dynamic_ventilation_severity(0.62),
+                min_satisfied=0,
+            )
+        )
+        # HE-VENTILATION-DEFICIT: ventilation failure in zone (active even with 0 workers).
+        self.add_rule(
+            CompoundRule(
+                template_id="HE-VENTILATION-DEFICIT",
+                name="Severe zone ventilation airflow deficit",
+                pathway="ventilation_starvation",
+                mandatory=[ventilation_degraded(0.4)],
+                predicates=[],
+                severity_fn=dynamic_ventilation_severity(0.50),
+                min_satisfied=0,
             )
         )
 

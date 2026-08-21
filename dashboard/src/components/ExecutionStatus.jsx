@@ -1,133 +1,131 @@
-// Live per-stage pipeline progress.
-//
-// This mirrors the backend's canonical stage vocabulary (app/engine/
-// scenario_pipeline.py :: STAGES) one-for-one. A stage lights up only when the
-// backend has actually reported it over /ws/scenarios/{run_id} — or, if the
-// socket is unavailable, when it appears in the recorded stage history
-// returned by GET /scenario/runs/{run_id}. Nothing here advances on a timer.
+import React from "react";
+import { CheckCircle2, Circle, AlertTriangle, XCircle, Clock } from "lucide-react";
 
 const STAGES = [
-  ["validating", "Scenario validation"],
-  ["model_inference", "Model inference"],
-  ["persisting_events", "Event persistence"],
-  ["queue_processing", "Queue processing"],
-  ["state_projection", "SQLite state projection"],
-  ["hypergraph_update", "Hypergraph update"],
-  ["rule_evaluation", "Compound-rule activation"],
-  ["path_extraction", "Causal-path extraction"],
-  ["risk_propagation", "Risk propagation"],
-  ["simulation", "Counterfactual simulation"],
-  ["optimization", "Minimum-causal-cut optimisation"],
-  ["regulatory_verification", "Regulatory verification"],
+  ["validating", "1. Scenario validation"],
+  ["model_inference", "2. Model inference"],
+  ["persisting_events", "3. Event persistence"],
+  ["queue_processing", "4. Queue processing"],
+  ["state_projection", "5. SQLite state projection"],
+  ["hypergraph_update", "6. Hypergraph update"],
+  ["rule_evaluation", "7. Compound-rule activation"],
+  ["path_extraction", "8. Causal-path extraction"],
+  ["risk_propagation", "9. Risk propagation"],
+  ["simulation", "10. Counterfactual simulation"],
+  ["optimization", "11. Minimum-causal-cut optimisation"],
+  ["regulatory_verification", "12. Regulatory verification"],
 ];
 
-// Backend status -> row appearance.
-const CLASS_FOR = {
-  ok: "done",
-  running: "active",
-  partial: "warn",
-  timeout: "warn",
-  error: "fail",
-};
-
-const MARK_FOR = { done: "✓", active: "•", warn: "!", fail: "×", pending: null };
-
-/** One-line summary of what the backend reported for this stage. */
-function detail(key, msg) {
-  if (!msg) return null;
-  const bits = [];
-  switch (key) {
-    case "model_inference": {
-      const ran = msg.models_ran?.length ?? 0;
-      const failed = msg.models_failed?.length ?? 0;
-      if (msg.status !== "running") {
-        bits.push(`${ran} model${ran === 1 ? "" : "s"} ran`);
-        if (failed) bits.push(`${failed} unavailable`);
-        if (msg.events != null) bits.push(`${msg.events} event(s)`);
-      }
-      break;
-    }
-    case "persisting_events":
-      if (msg.persisted != null) bits.push(`${msg.persisted} persisted`);
-      if (msg.rejected) bits.push(`${msg.rejected} rejected`);
-      else if (msg.total != null && msg.persisted == null) bits.push(`${msg.total} queued`);
-      break;
-    case "queue_processing":
-      if (msg.processed != null) bits.push(`${msg.processed}/${msg.expected} processed`);
-      else if (msg.expected != null) bits.push(`${msg.expected} expected`);
-      if (msg.failed) bits.push(`${msg.failed} failed`);
-      break;
-    case "state_projection":
-      if (msg.projected != null) bits.push(`${msg.projected} projected`);
-      break;
-    case "hypergraph_update":
-      if (msg.applied != null) bits.push(`${msg.applied} applied`);
-      if (msg.skipped) bits.push(`${msg.skipped} not graph-relevant`);
-      break;
-    default:
-      break;
-  }
-  if (msg.error) bits.push(String(msg.error).slice(0, 80));
-  if (!bits.length && msg.elapsed_ms != null) bits.push(`${Math.round(msg.elapsed_ms)} ms`);
-  return bits.join(" · ") || null;
-}
-
 export default function ExecutionStatus({ phase, stages = {}, latest, failedStage }) {
-  // phase: 'idle' | 'running' | 'done' | 'error'
   const finished = Boolean(stages.completed) || phase === "done";
 
   return (
-    <div className="panel">
-      <div className="panel-title">
-        Execution Status
-        {phase === "running" && (
-          <span className="mono" style={{ marginLeft: "auto", fontSize: 11, color: "var(--ink-faint)" }}>
-            {latest?.label ?? "waiting for backend…"}
+    <div className="panel-box" style={{ padding: 16 }}>
+      <div className="panel-header-row" style={{ marginBottom: 12 }}>
+        <span className="panel-title-text">PIPELINE EXECUTION STAGES</span>
+        {phase === "running" ? (
+          <span className="badge-pill elevated" style={{ animation: "pulse 1.5s infinite" }}>
+            ● RUNNING
+          </span>
+        ) : finished ? (
+          <span className="badge-pill connected">● COMPLETED</span>
+        ) : phase === "error" ? (
+          <span className="badge-pill alert">● FAILED</span>
+        ) : (
+          <span className="badge-pill" style={{ backgroundColor: "#f1f5f9", color: "#64748b" }}>
+            ● IDLE
           </span>
         )}
       </div>
 
       {phase === "idle" && (
-        <div className="faint mono" style={{ fontSize: 11, marginBottom: 8 }}>
-          Not started. Stages populate from the backend as the pipeline runs.
+        <div style={{ fontSize: 11.5, color: "#64748b", marginBottom: 12, lineHeight: 1.4 }}>
+          Ready to simulate. Stages will stream live from the backend as each pipeline stage completes.
         </div>
       )}
 
-      <div className="stages">
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {STAGES.map(([key, label], i) => {
           const msg = stages[key];
-          let cls = "pending";
-          if (key === failedStage && phase === "error") cls = "fail";
-          else if (msg) cls = CLASS_FOR[msg.status] ?? "done";
-          // The pipeline reports analysis stages once, on success; a terminal
-          // "completed" therefore implies every earlier stage passed.
-          else if (finished) cls = "done";
+          let status = "pending";
+          if (key === failedStage && phase === "error") status = "fail";
+          else if (msg?.status === "ok" || finished) status = "done";
+          else if (msg?.status === "running") status = "active";
+          else if (msg?.status === "partial" || msg?.status === "timeout") status = "warn";
 
-          const mark = MARK_FOR[cls] ?? i + 1;
-          const info = detail(key, msg);
+          let icon = <Circle size={13} color="#94a3b8" />;
+          let color = "#64748b";
+          let bg = "#f8fafc";
+          let borderColor = "#e2e8f0";
+
+          if (status === "done") {
+            icon = <CheckCircle2 size={13} color="#059669" />;
+            color = "#0f172a";
+            bg = "#f0fdf4";
+            borderColor = "#bbf7d0";
+          } else if (status === "active") {
+            icon = <Clock size={13} color="#ea580c" className="animate-spin" />;
+            color = "#ea580c";
+            bg = "#fff7ed";
+            borderColor = "#fdba74";
+          } else if (status === "fail") {
+            icon = <XCircle size={13} color="#ef4444" />;
+            color = "#b91c1c";
+            bg = "#fef2f2";
+            borderColor = "#fecaca";
+          } else if (status === "warn") {
+            icon = <AlertTriangle size={13} color="#d97706" />;
+            color = "#b45309";
+            bg = "#fffbeb";
+            borderColor = "#fde68a";
+          }
 
           return (
-            <div key={key} className={`stage ${cls}`}>
-              <span className="ic">{mark ?? i + 1}</span>
-              <span className="lbl">{label}</span>
-              {info && <span className="stage-meta mono">{info}</span>}
+            <div
+              key={key}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "6px 10px",
+                borderRadius: 4,
+                backgroundColor: bg,
+                border: `1px solid ${borderColor}`,
+                fontSize: 11.5,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {icon}
+                <span style={{ fontWeight: status === "done" || status === "active" ? 600 : 500, color }}>
+                  {label}
+                </span>
+              </div>
+              {msg?.elapsed_ms != null && (
+                <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "#64748b" }}>
+                  {Math.round(msg.elapsed_ms)} ms
+                </span>
+              )}
             </div>
           );
         })}
       </div>
 
       {stages.completed && (
-        <div className="audit-ok" style={{ marginTop: 10 }}>
+        <div
+          style={{
+            marginTop: 12,
+            padding: "8px 12px",
+            backgroundColor: "#ecfdf5",
+            border: "1px solid #10b981",
+            borderRadius: 4,
+            fontSize: 11.5,
+            fontWeight: 600,
+            color: "#065f46",
+          }}
+        >
           ✓ Pipeline completed
-          {stages.completed.elapsed_ms != null &&
-            ` in ${Math.round(stages.completed.elapsed_ms)} ms`}
-          {stages.completed.rules != null &&
-            ` · ${stages.completed.rules} compound rule(s) activated`}
-        </div>
-      )}
-      {stages.failed && (
-        <div className="err-msg" style={{ marginTop: 10 }}>
-          {stages.failed.error || "Pipeline failed."}
+          {stages.completed.elapsed_ms != null && ` in ${Math.round(stages.completed.elapsed_ms)} ms`}
+          {stages.completed.rules != null && ` · ${stages.completed.rules} compound rules activated`}
         </div>
       )}
     </div>

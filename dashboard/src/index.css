@@ -1,1 +1,55 @@
 @import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    
+    --bg-app: #f4f6f8;
+    --bg-surface: #ffffff;
+    --bg-sidebar: #121d2b;
+    --bg-sidebar-hover: #1a283b;
+    --bg-sidebar-active: #1e314b;
+    
+    --border-main: #e2e8f0;
+    --border-light: #edf2f7;
+    
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --text-sidebar: #94a3b8;
+    --text-sidebar-active: #ffffff;
+    
+    --accent-orange: #ea580c;
+    --accent-gold: #d97706;
+    --accent-teal: #0d9488;
+    --accent-blue: #2563eb;
+    
+    --status-red: #ef4444;
+    --status-red-bg: #fef2f2;
+    --status-red-text: #b91c1c;
+    
+    --status-amber: #f59e0b;
+    --status-amber-bg: #fffbeb;
+    --status-amber-text: #b45309;
+    
+    --status-green: #10b981;
+    --status-green-bg: #ecfdf5;
+    --status-green-text: #047857;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-sans);
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+}

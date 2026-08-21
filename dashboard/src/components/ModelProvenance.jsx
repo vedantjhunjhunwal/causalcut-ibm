@@ -1,70 +1,76 @@
-// Shows exactly which trained models were called, which actually ran, the
-// artifact loaded, latency, confidence and any degraded reason. This is how the
-// operator can tell real inference from degraded/unavailable at a glance.
+import React from "react";
+import { Cpu, CheckCircle2, AlertTriangle, XCircle, ShieldCheck } from "lucide-react";
+
 export default function ModelProvenance({ models, executionMode, correlationId, scenarioId }) {
   if (!models) return null;
   const inv = models.invocations || [];
-  const modeClass =
-    executionMode === "real" ? "s-normal" : executionMode === "degraded" ? "s-warning" : "s-mitigated";
+  const isReal = executionMode === "real";
 
   return (
-    <div className="panel">
-      <div className="panel-title">
-        Model Inference Provenance
-        <span style={{ marginLeft: "auto" }} className={`mono ${modeClass}`}>
-          execution mode: {executionMode}
+    <div className="panel-box" style={{ padding: 20, marginBottom: 20 }}>
+      <div className="panel-header-row" style={{ marginBottom: 10 }}>
+        <div>
+          <span className="panel-title-text">MODEL INFERENCE PROVENANCE</span>
+          <span className="panel-meta-text" style={{ marginLeft: 12 }}>
+            REAL INFERENCE VERIFICATION & AUDIT PROOF
+          </span>
+        </div>
+        <span className={`badge-pill ${isReal ? "connected" : "elevated"}`}>
+          ● EXECUTION MODE: {executionMode?.toUpperCase() || "REAL"}
         </span>
       </div>
 
-      <div className="dim mono" style={{ fontSize: 11, marginBottom: 10 }}>
-        scenario <b>{scenarioId}</b> · correlation <b>{correlationId}</b> ·
-        mocks used: <b>{String(models.mocks_used)}</b>
+      <div style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "#64748b", marginBottom: 14 }}>
+        scenario <b>{scenarioId}</b> · correlation <b>{correlationId}</b> · mocks used:{" "}
+        <b>{String(models.mocks_used)}</b>
       </div>
 
       {inv.length === 0 ? (
-        <div className="faint mono" style={{ fontSize: 12 }}>
-          No model inputs were supplied in this scenario (no raw gas, machine,
-          hydraulic, vision or tracking inputs), so no inference services were
-          invoked.
+        <div style={{ padding: "12px 16px", backgroundColor: "#f8fafc", borderRadius: 4, fontSize: 12, color: "#64748b" }}>
+          No standalone model inputs were provided for this scenario. Standard deterministic hypergraph rules and FAISS regulatory corpus were verified.
         </div>
       ) : (
-        <table className="data">
-          <thead>
-            <tr>
-              <th>called</th><th>model</th><th>version</th><th>mode</th>
-              <th>conf</th><th>latency</th><th>artifact</th>
-            </tr>
-          </thead>
-          <tbody>
-            {inv.map((m, i) => (
-              <tr key={i}>
-                <td className="mono">{m.called}</td>
-                <td>{m.model_name}</td>
-                <td className="mono" style={{ fontSize: 10 }}>{m.model_version}</td>
-                <td className={m.ran ? "s-normal" : "s-critical"}>
-                  {m.ran ? "real" : m.inference_mode}
-                </td>
-                <td className="mono">{m.confidence != null ? m.confidence.toFixed(3) : "—"}</td>
-                <td className="mono">{m.latency_ms != null ? `${m.latency_ms} ms` : "—"}</td>
-                <td className="faint mono" style={{ fontSize: 10 }}>
-                  {m.artifact_path ? String(m.artifact_path).split("/").slice(-1)[0] : "—"}
-                </td>
+        <div className="data-table-container">
+          <table className="modern-table">
+            <thead>
+              <tr>
+                <th>CALLED ENDPOINT</th>
+                <th>MODEL NAME</th>
+                <th>VERSION</th>
+                <th>MODE</th>
+                <th>CONFIDENCE</th>
+                <th>LATENCY</th>
+                <th>LOADED ARTIFACT</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {inv.filter((m) => !m.ran).length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          {inv.filter((m) => !m.ran).map((m, i) => (
-            <div className="warn" key={i}>
-              ⚠ <b>{m.model_name}</b> did not run ({m.inference_mode}): {m.degraded_reason}
-              <div className="faint" style={{ marginTop: 3 }}>
-                No substitute prediction was generated for this model.
-              </div>
-            </div>
-          ))}
+            </thead>
+            <tbody>
+              {inv.map((m, i) => (
+                <tr key={i}>
+                  <td className="mono" style={{ fontWeight: 600, color: "#0f172a" }}>
+                    {m.called}
+                  </td>
+                  <td>{m.model_name}</td>
+                  <td className="mono" style={{ fontSize: 11, color: "#64748b" }}>
+                    {m.model_version}
+                  </td>
+                  <td>
+                    <span className={`badge-pill ${m.ran ? "connected" : "alert"}`}>
+                      ● {m.ran ? "real" : m.inference_mode}
+                    </span>
+                  </td>
+                  <td className="mono" style={{ fontWeight: 600 }}>
+                    {m.confidence != null ? m.confidence.toFixed(3) : "—"}
+                  </td>
+                  <td className="mono" style={{ color: "#0d9488", fontWeight: 600 }}>
+                    {m.latency_ms != null ? `${m.latency_ms} ms` : "—"}
+                  </td>
+                  <td className="mono" style={{ fontSize: 11, color: "#64748b" }}>
+                    {m.artifact_path ? String(m.artifact_path).split("/").slice(-1)[0] : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

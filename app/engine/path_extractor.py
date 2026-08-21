@@ -67,13 +67,22 @@ _PATHWAY_DECOMPOSITION: dict[str, list[SubPathway]] = {
         SubPathway("toxic_exposure", frozenset({"gas_source", "worker_exposure", "ventilation_deficit"})),
     ],
     "acute_toxic_exposure": [
-        SubPathway("toxic_exposure", frozenset({"gas_source", "worker_exposure", "ventilation_deficit"})),
+        SubPathway("toxic_exposure", frozenset({"gas_source", "worker_exposure"})),
+    ],
+    "gas_accumulation": [
+        SubPathway("containment_loss", frozenset({"gas_source"})),
     ],
     "uncontrolled_ignition": [
         SubPathway("ignition", frozenset({"ignition_source", "gas_source", "barrier_gap"})),
     ],
     "mechanical_injury": [
         SubPathway("mechanical_injury", frozenset({"equipment_hazard", "worker_exposure"})),
+    ],
+    "equipment_hazard": [
+        SubPathway("machine_breakdown", frozenset({"equipment_hazard"})),
+    ],
+    "ventilation_starvation": [
+        SubPathway("ventilation_deficit", frozenset({"ventilation_deficit"})),
     ],
 }
 
@@ -252,45 +261,71 @@ class PathExtractor:
                 p for p in self.graph.active_permits_in_zone(zone_id)
                 if self.graph.node(p).get("permit_type") == "hot_work"
             ]
-            target = permits[0] if permits else f"{zone_id}:hot_work"
-            cands.append(CandidateIntervention(
-                intervention_id=f"INT-suspend-{target}",
-                action=f"Suspend hot-work permit {target} in {zone_id}",
-                target_node=target,
-                intervention_type="suspend_permit",
-                cost_category="LOW", disruption="MINIMAL", execution_time_min=2,
-                breaks_factors=frozenset({"ignition_source"}),
-            ))
+            for target in permits:
+                cands.append(CandidateIntervention(
+                    intervention_id=f"INT-suspend-{target}",
+                    action=f"Suspend hot-work permit {target} in {zone_id}",
+                    target_node=target,
+                    intervention_type="suspend_permit",
+                    cost_category="LOW", disruption="MINIMAL", execution_time_min=2,
+                    breaks_factors=frozenset({"ignition_source"}),
+                ))
 
-        # Evacuate an exposed worker -> removes worker exposure + unprotected worker.
-        if "worker_exposure" in fset or "unprotected_worker" in fset:
+        # Evacuate exposed workers -> removes worker exposure (only for workers actually present).
+        if "worker_exposure" in fset:
             workers = self.graph.workers_in_zone(zone_id)
-            target = workers[0] if workers else f"{zone_id}:worker"
-            cands.append(CandidateIntervention(
-                intervention_id=f"INT-evacuate-{target}",
-                action=f"Evacuate worker {target} from {zone_id}",
-                target_node=target,
-                intervention_type="evacuate_worker",
-                cost_category="LOW", disruption="LOW", execution_time_min=3,
-                breaks_factors=frozenset({"worker_exposure", "unprotected_worker"}),
-            ))
+            for target in workers:
+                cands.append(CandidateIntervention(
+                    intervention_id=f"INT-evacuate-{target}",
+                    action=f"Evacuate worker {target} from {zone_id}",
+                    target_node=target,
+                    intervention_type="evacuate_worker",
+                    cost_category="LOW", disruption="LOW", execution_time_min=3,
+                    breaks_factors=frozenset({"worker_exposure"}),
+                ))
 
-        # Increase ventilation -> removes ventilation deficit (and dilutes gas).
+        # Trip / isolate failing equipment -> removes equipment hazard.
+        if "equipment_hazard" in fset:
+            assets = sorted(
+                [
+                    a for a in self.graph.predecessors(zone_id, Relation.IN_ZONE)
+                    if self.graph.node(a).get("node_type") == NodeType.ASSET.value
+                    and (self.graph.node(a).get("failure_probability") or 0.0) >= 0.4
+                ],
+                key=lambda a: self.graph.node(a).get("failure_probability", 0.0),
+                reverse=True,
+            )
+            for idx, target in enumerate(assets):
+                cands.append(CandidateIntervention(
+                    intervention_id=f"INT-trip-{target}",
+                    action=f"Emergency trip and isolate machine {target} in {zone_id}",
+                    target_node=target,
+                    intervention_type="isolate_equipment",
+                    cost_category="LOW", disruption="LOW", execution_time_min=1 if idx == 0 else 2 + idx,
+                    breaks_factors=frozenset({"equipment_hazard"}),
+                ))
+
+        # Increase ventilation -> removes ventilation deficit.
         if "ventilation_deficit" in fset or "gas_source" in fset:
             cands.append(CandidateIntervention(
                 intervention_id=f"INT-vent-{zone_id}",
                 action=f"Override ventilation in {zone_id} to 100%",
                 target_node=zone_id,
                 intervention_type="increase_ventilation",
-                cost_category="MEDIUM", disruption="LOW", execution_time_min=1,
+                cost_category="LOW", disruption="MINIMAL", execution_time_min=1,
                 breaks_factors=frozenset({"ventilation_deficit"}),
             ))
 
-        # Require PPE -> removes unprotected worker only (weak alone by design).
+        # Require PPE -> removes unprotected worker only.
         if "unprotected_worker" in fset:
+            offenders = [
+                w for w in self.graph.workers_in_zone(zone_id)
+                if not self.graph.node(w).get("ppe_compliant", True)
+            ]
+            target_label = ", ".join(offenders) if offenders else zone_id
             cands.append(CandidateIntervention(
                 intervention_id=f"INT-ppe-{zone_id}",
-                action=f"Require immediate PPE compliance in {zone_id}",
+                action=f"Enforce immediate PPE compliance for {target_label} in {zone_id}",
                 target_node=zone_id,
                 intervention_type="enforce_ppe",
                 cost_category="LOW", disruption="MINIMAL", execution_time_min=2,
@@ -304,11 +339,11 @@ class PathExtractor:
                 action=f"Activate gas isolation valve in {zone_id}",
                 target_node=zone_id,
                 intervention_type="gas_isolation",
-                cost_category="MEDIUM", disruption="HIGH", execution_time_min=2,
+                cost_category="MEDIUM", disruption="LOW", execution_time_min=2,
                 breaks_factors=frozenset({"gas_source"}),
             ))
 
-        # Close the zone -> the sledgehammer: removes every factor at HIGH cost.
+        # Close the zone -> the emergency fallback: removes every factor at HIGH cost.
         cands.append(CandidateIntervention(
             intervention_id=f"INT-close-{zone_id}",
             action=f"Close and lock out {zone_id}",

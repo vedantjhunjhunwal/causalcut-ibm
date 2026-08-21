@@ -355,7 +355,10 @@ def _explain(scenario, paths, recommendation, tth, citations) -> str:
         f"{worst.root_zone} (severity {worst.severity:.2f})."
     ]
     if tth is not None:
-        lines.append(f"Estimated time-to-harm for {worst.root_zone}: ~{tth/60:.1f} minutes [P].")
+        if tth == 0.0:
+            lines.append(f"Immediate critical harm threshold reached in {worst.root_zone} [P].")
+        else:
+            lines.append(f"Estimated time-to-harm for {worst.root_zone}: ~{tth/60:.1f} minutes [P].")
     if recommendation is not None and recommendation.interventions:
         acts = "; ".join(c.action for c in recommendation.interventions)
         lines.append(
@@ -492,9 +495,34 @@ def analyse_graph(
     for zid in graph.nodes_of_type_zone():
         node = graph.node(zid)
         ppm = node.get("last_gas_ppm") or 0.0
-        sev = max(0.0, min(1.0, ppm / _PPM_SATURATION))
-        hazard_severity[zid] = sev
-        zone_risk[zid] = sev
+        thr = node.get("baseline_gas_threshold_ppm", 200.0)
+
+        # Gas relative severity
+        if ppm > thr:
+            gas_sev = min(1.0, 0.5 + (ppm - thr) / max(1.0, thr * 2.0))
+        elif ppm >= 0.7 * thr:
+            gas_sev = round((ppm / max(1.0, thr)) * 0.4, 3)
+        elif ppm > 0:
+            gas_sev = round((ppm / max(1.0, thr)) * 0.2, 3)
+        else:
+            gas_sev = 0.0
+
+        # Asset condition
+        asset_fps = [
+            (graph.node(a).get("failure_probability") or 0.0)
+            for a in graph.predecessors(zid, Relation.IN_ZONE)
+            if graph.node(a).get("node_type") == NodeType.ASSET.value
+        ]
+        asset_sev = max(asset_fps, default=0.0)
+
+        # Ventilation condition
+        flow = node.get("ventilation_flow_ratio", 1.0)
+        vent_sev = max(0.0, 1.0 - flow) if flow < 0.8 else 0.0
+
+        sev = max(gas_sev, asset_sev, vent_sev)
+        hazard_severity[zid] = round(sev, 3)
+        zone_risk[zid] = round(sev, 3)
+
     # Boost zone risk to the max activated pathway severity in that zone.
     for p in paths:
         zone_risk[p.root_zone] = max(zone_risk.get(p.root_zone, 0.0), p.severity)

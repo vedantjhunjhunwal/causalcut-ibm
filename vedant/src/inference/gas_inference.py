@@ -121,6 +121,20 @@ def _detect_trend(features: np.ndarray, sensor_index: int = 0) -> str:
     return "stable"
 
 
+def _get_sensor_feature_index(sensor_id: str, num_sensors: int = 16) -> int:
+    """Safely map any arbitrary string sensor identifier (e.g. 'GS-MET-12', 'GS-03', 'HYD-FG-03')
+    to a 0..15 feature block index without requiring the ID itself to be numeric."""
+    import re
+    digits = re.findall(r"\d+", str(sensor_id))
+    if digits:
+        try:
+            val = int(digits[-1]) - 1
+            return max(0, min(num_sensors - 1, val % num_sensors))
+        except (ValueError, TypeError):
+            pass
+    return abs(hash(str(sensor_id))) % num_sensors
+
+
 class GasInferencePipeline:
     """Loads Nir's XGBoost + IsoForest models and runs inference.
 
@@ -219,7 +233,7 @@ class GasInferencePipeline:
 
         # --- Derive metrics ---
         severity = _map_severity(anomaly_score) if is_anomaly else 0.05
-        sensor_index = int(sensor_id.replace("GS-", "")) - 1 if sensor_id.startswith("GS-") else 0
+        sensor_index = _get_sensor_feature_index(sensor_id)
         concentration = _estimate_concentration(features[0], sensor_index)
         trend = _detect_trend(features[0], sensor_index)
 

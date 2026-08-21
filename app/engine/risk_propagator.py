@@ -1,4 +1,4 @@
-﻿"""Spatiotemporal risk propagation â€” Day 1 math spec + reference implementation.
+"""Spatiotemporal risk propagation â€” Day 1 math spec + reference implementation.
 
 Design doc Â§5 (Risk Evaluation & Propagation Logic) / Â§8 coke-oven scenario.
 Owner: Riya.
@@ -122,7 +122,7 @@ def propagate_step(
             diffusion += DEFAULT_COUPLING_RATE * w_ij * b_ij * (r_j - r_i)
 
         severity = inputs.hazard_severity.get(zone, 0.0)
-        injected = max(0.0, 1.0 - r_i) * severity
+        injected = max(0.0, 1.0 - r_i) * severity * 0.03 * dt_seconds
 
         r_next = r_i - decay_i * r_i * dt_seconds + dt_seconds * diffusion + injected
         next_risk[zone] = _clamp01(r_next)

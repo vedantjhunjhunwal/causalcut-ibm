@@ -37,9 +37,9 @@ class RemoteModelService(BaseModelService):
         name: str,
         url: str,
         *,
-        timeout_s: float = 10.0,
+        timeout_s: float = 2.0,
         retries: int = 1,
-        backoff_s: float = 0.25,
+        backoff_s: float = 0.1,
     ) -> None:
         super().__init__()
         self.name = name
