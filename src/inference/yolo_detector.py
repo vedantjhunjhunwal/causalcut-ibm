@@ -28,18 +28,22 @@ logger = logging.getLogger(__name__)
 # from Roboflow (3 classes).
 # ---------------------------------------------------------------------------
 DEFAULT_CLASS_MAP: dict[int, str] = {
-    0: "hard_hat",
-    1: "person",
+    0: "person",
+    1: "hard_hat",
     2: "safety_vest",
+    3: "no_hat",
+    4: "no_vest",
 }
 
 # Confidence floors per class.  PPE items need a lower floor because
 # they're small objects and the model struggles with them at distance;
 # "person" can afford to be pickier so we don't hallucinate workers.
 DEFAULT_CONFIDENCE_THRESHOLDS: dict[str, float] = {
-    "person": 0.50,
-    "hard_hat": 0.35,
-    "safety_vest": 0.35,
+    "person": 0.30,
+    "hard_hat": 0.25,
+    "safety_vest": 0.25,
+    "no_hat": 0.20,
+    "no_vest": 0.20,
 }
 
 FALLBACK_CONFIDENCE = 0.40
