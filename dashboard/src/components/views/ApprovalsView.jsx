@@ -2,31 +2,22 @@ import React, { useState } from "react";
 import { ClipboardCheck, Check, X, ShieldAlert, FileText } from "lucide-react";
 import { api } from "../../api";
 
-export default function ApprovalsView({ onNavigate }) {
+export default function ApprovalsView({ result, onNavigate }) {
   const [decisions, setDecisions] = useState({});
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const pendingApprovals = [
-    {
-      id: "INT-2047",
-      title: "Isolate Gas Line G-204 (Gas Treatment)",
-      requestedBy: "Risk Inference Engine",
-      expectedRiskReduction: "-31%",
-      timeWaiting: "06 min",
-      urgency: "HIGH",
-      details: "Gas concentration reached 74 ppm. Stopping active edge between concentration and ignition probability.",
-    },
-    {
-      id: "INT-2039",
-      title: "Pause Hot Work Permit HW-8821 (Battery 3)",
-      requestedBy: "Cross-Zone Causal Cut Engine",
-      expectedRiskReduction: "-18%",
-      timeWaiting: "04 min",
-      urgency: "MEDIUM",
-      details: "Hot work permit HW-8821 in Battery 3 is within thermal plume dispersion radius.",
-    },
-  ];
+  const pendingApprovals = (result?.recommendation?.interventions || []).map((iv, idx) => ({
+    id: iv.intervention_id || `INT-${2047 - idx * 8}`,
+    title: `${iv.action} (${iv.target_zone || "Zone"})`,
+    requestedBy: "Risk Inference Engine",
+    expectedRiskReduction: `-${Math.round((iv.risk_reduction || 0.31) * 100)}%`,
+    timeWaiting: "00 min",
+    urgency: idx === 0 ? "HIGH" : idx === 1 ? "MEDIUM" : "LOW",
+    details: iv.breaks_factors?.length
+      ? `Stopping active edge between ${iv.breaks_factors.join(" and ")}.`
+      : "Automated intervention request.",
+  }));
 
   const handleDecision = async (id, decision) => {
     setLoading(true);
@@ -57,7 +48,12 @@ export default function ApprovalsView({ onNavigate }) {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {pendingApprovals.map((appr) => {
+        {pendingApprovals.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "40px 0", color: "#64748b" }}>
+            No pending approvals.
+          </div>
+        ) : (
+          pendingApprovals.map((appr) => {
           const status = decisions[appr.id];
           return (
             <div key={appr.id} className="panel-box" style={{ padding: 20 }}>
@@ -124,7 +120,7 @@ export default function ApprovalsView({ onNavigate }) {
               </div>
             </div>
           );
-        })}
+        }))}
       </div>
     </div>
   );

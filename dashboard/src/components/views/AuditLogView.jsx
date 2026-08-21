@@ -8,52 +8,7 @@ export default function AuditLogView() {
   const [auditRecords, setAuditRecords] = useState([]);
   const [selectedRecord, setSelectedRecord] = useState(null);
 
-  const defaultChainedEvents = [
-    {
-      seq: 4,
-      timestamp: "21 Aug · 00:09:41",
-      event: "G-204 threshold crossed",
-      actor: "sensor gateway",
-      hash: "8a4e...91bc",
-      full_hash: "8a4e1369d0d2721c3dcc82b8c93bd22f7f1164775def00b17cfb6aad91bc",
-      prev_hash: "4c117ae0f7e15dd1719c46119ea7a3a8d80fb5b298e9bd80ab0124f1f9c94a21",
-      integrity: "LOW",
-      details: "Gas reading GS-03 reached 74 ppm, crossing baseline threshold of 50 ppm.",
-    },
-    {
-      seq: 3,
-      timestamp: "21 Aug · 00:08:26",
-      event: "Risk path RP-2047 updated",
-      actor: "risk engine",
-      hash: "4c11...7ae0",
-      full_hash: "4c117ae0f7e15dd1719c46119ea7a3a8d80fb5b298e9bd80ab0124f1f9c94a21",
-      prev_hash: "912f12aaf7e15dd1719c46119ea7a3a8d80fb5b298e9bd80ab0124f1f9c94a21",
-      integrity: "LOW",
-      details: "Active risk path elevated to 7.4 index; recommended intervention INT-2047.",
-    },
-    {
-      seq: 2,
-      timestamp: "21 Aug · 00:07:52",
-      event: "Permit HW-8821 submitted",
-      actor: "M. Rao",
-      hash: "912f...12aa",
-      full_hash: "912f12aaf7e15dd1719c46119ea7a3a8d80fb5b298e9bd80ab0124f1f9c94a21",
-      prev_hash: "3c098f1100000000000000000000000000000000000000000000000000000000",
-      integrity: "LOW",
-      details: "Hot work permit HW-8821 active in Battery 3 for torch welding.",
-    },
-    {
-      seq: 1,
-      timestamp: "20 Aug · 23:58:02",
-      event: "Shift handover acknowledged",
-      actor: "N. Sharma",
-      hash: "3c09...8f11",
-      full_hash: "3c098f1198e9bd80ab0124f1f9c94a21e919258dca36fdb165593816ce23c9fe",
-      prev_hash: "0000000000000000000000000000000000000000000000000000000000000000",
-      integrity: "LOW",
-      details: "Shift Officer B handover from Shift Officer A acknowledged with 0 active redlines.",
-    },
-  ];
+  const defaultChainedEvents = [];
 
   const fetchAuditTrail = async () => {
     try {
@@ -102,7 +57,7 @@ export default function AuditLogView() {
       setVerificationResult({
         valid: true,
         firstBad: null,
-        count: 4,
+        count: 0,
         time: new Date().toLocaleTimeString("en-GB", { hour12: false }),
       });
     } finally {

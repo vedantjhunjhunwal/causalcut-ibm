@@ -38,24 +38,17 @@ export default function CommandCenterView({
 
   // Compute dynamic stats from active scenario and result
   const zoneRiskMap = result?.zone_risk || {};
-  const maxRisk = Object.values(zoneRiskMap).length > 0 ? Math.max(...Object.values(zoneRiskMap)) : 0.74;
+  const maxRisk = Object.values(zoneRiskMap).length > 0 ? Math.max(...Object.values(zoneRiskMap)) : 0;
   const riskIndex = (maxRisk * 10).toFixed(1);
-  const openPathsCount = result?.causal_paths?.length ?? 4;
-  const workersCount = scenario?.workers?.length ? scenario.workers.length * 92 : 184;
-  const sensorsCount = scenario?.sensors?.length ? scenario.sensors.length * 208 : 412;
-  const pendingApprovalsCount = result?.recommendation?.interventions?.length ?? 2;
+  const openPathsCount = result?.causal_paths?.length ?? 0;
+  const workersCount = scenario?.workers?.length ?? 0;
+  const sensorsCount = scenario?.sensors?.length ?? 0;
+  const pendingApprovalsCount = result?.recommendation?.interventions?.length ?? 0;
 
   // Active zones for the 2D floorplan
   const scenarioZones = scenario?.zones?.length
     ? scenario.zones
-    : [
-        { zone_id: "zone-1", name: "Coke Oven", hazard_class: "gas_hazard" },
-        { zone_id: "zone-2", name: "Battery 3", hazard_class: "high_risk" },
-        { zone_id: "zone-3", name: "Gas Treatment", hazard_class: "gas_hazard" },
-        { zone_id: "zone-4", name: "Coal Handling", hazard_class: "standard" },
-        { zone_id: "zone-5", name: "Quench Tower", hazard_class: "standard" },
-        { zone_id: "zone-6", name: "Power House", hazard_class: "standard" },
-      ];
+    : [];
 
   const floorPositions = [
     { left: "12%", top: "38%", width: "18%", height: "28%" },
@@ -67,7 +60,7 @@ export default function CommandCenterView({
   ];
 
   const mapZones = scenarioZones.map((z, idx) => {
-    const risk = zoneRiskMap[z.zone_id] ?? (idx === 2 ? 0.74 : idx === 1 ? 0.58 : 0.12);
+    const risk = zoneRiskMap[z.zone_id] ?? 0;
     const status = risk >= 0.6 ? "alert" : risk >= 0.3 ? "elevated" : "normal";
     const pos = floorPositions[idx % floorPositions.length];
     return {
@@ -80,7 +73,7 @@ export default function CommandCenterView({
   });
 
   const activeSelectedZone =
-    mapZones.find((z) => z.id === selectedZoneId) || mapZones[2] || mapZones[0];
+    mapZones.find((z) => z.id === selectedZoneId) || mapZones[2] || mapZones[0] || { name: "No zone", state: "normal", risk: 0, id: "none" };
 
   // Dynamic Causal Network nodes from result or active path
   const primaryPath = result?.causal_paths?.[0];
@@ -92,20 +85,14 @@ export default function CommandCenterView({
         { title: "Worker Exposure", likelihood: "0.40 likelihood", status: "neutral" },
         { title: "Potential Fire", likelihood: `${(primaryPath.severity || 0.31).toFixed(2)} severity`, status: "alert" },
       ]
-    : [
-        { title: "Gas Leak", likelihood: "0.81 likelihood", status: "neutral" },
-        { title: "High Concentration", likelihood: "0.74 likelihood", status: "elevated" },
-        { title: "Ignition Probability", likelihood: "0.62 likelihood", status: "active-gold" },
-        { title: "Worker Exposure", likelihood: "0.40 likelihood", status: "neutral" },
-        { title: "Potential Fire", likelihood: "0.31 likelihood", status: "alert" },
-      ];
+    : [];
 
   // Priority action from recommendation
   const primaryCut = result?.recommendation?.interventions?.[0];
-  const primaryActionTitle = primaryCut ? primaryCut.action : "Isolate Gas Line G-204";
+  const primaryActionTitle = primaryCut ? primaryCut.action : "No pending actions";
   const primaryActionPath = primaryCut?.breaks_factors?.length
     ? `Interrupts: ${primaryCut.breaks_factors.join(" → ")}`
-    : "Interrupts: Gas Leak → High Concentration → Ignition Probability → Worker Exposure → Potential Fire";
+    : "System is operating normally";
 
   const handleQuickApprove = async () => {
     setApprovedQuick(true);
@@ -120,32 +107,7 @@ export default function CommandCenterView({
   };
 
   // Events list merging live API and scenario events
-  const defaultEvents = [
-    {
-      time: "00:09:41",
-      source: "SENSOR",
-      desc: "G-204 gas concentration crossed warning threshold · Gas Treatment",
-      severity: "HIGH",
-    },
-    {
-      time: "00:08:26",
-      source: "RISK",
-      desc: "Causal path RP-2047 updated: Ignition probability elevated to 0.62",
-      severity: "HIGH",
-    },
-    {
-      time: "00:07:52",
-      source: "PERMIT",
-      desc: "Hot work permit HW-8821 active in adjacent zone Battery 3",
-      severity: "MEDIUM",
-    },
-    {
-      time: "00:06:14",
-      source: "SENSOR",
-      desc: "Pressure train A nominal at 1.02 bar · Coke Oven",
-      severity: "LOW",
-    },
-  ];
+  const defaultEvents = [];
 
   const displayEvents = liveEvents.length > 0
     ? liveEvents.slice(0, 5).map((ev) => ({

@@ -12,7 +12,7 @@ export default function PlantStateView({ scenario, result }) {
   // Extract zones dynamically
   const zonesList = scenario?.zones?.length
     ? scenario.zones.map((z) => z.name || z.zone_id)
-    : ["Gas Treatment", "Battery 3", "Coke Oven", "Coal Handling", "Quench Tower"];
+    : [];
 
   const zoneFilters = ["ALL", ...new Set(zonesList)];
 
@@ -87,43 +87,7 @@ export default function PlantStateView({ scenario, result }) {
     });
   }
 
-  const defaultEntities = [
-    {
-      zone: "Gas Treatment",
-      entity: "G-204 gas sensor",
-      state: "74 ppm",
-      signal: "MEDIUM",
-      observed: "00:09:41",
-    },
-    {
-      zone: "Battery 3",
-      entity: "Hot work permit HW-8821",
-      state: "Active / review",
-      signal: "MEDIUM",
-      observed: "00:07:52",
-    },
-    {
-      zone: "Coke Oven",
-      entity: "Pressure train A",
-      state: "1.02 bar",
-      signal: "LOW",
-      observed: "00:06:14",
-    },
-    {
-      zone: "Coal Handling",
-      entity: "Conveyor CH-04",
-      state: "Running",
-      signal: "LOW",
-      observed: "00:05:48",
-    },
-    {
-      zone: "Quench Tower",
-      entity: "Platform access",
-      state: "4 workers",
-      signal: "LOW",
-      observed: "00:03:26",
-    },
-  ];
+  const defaultEntities = [];
 
   const displayEntities = scenarioEntities.length > 0 ? scenarioEntities : defaultEntities;
 
@@ -151,10 +115,10 @@ export default function PlantStateView({ scenario, result }) {
       ? displayEntities
       : displayEntities.filter((row) => row.zone.toLowerCase() === activeZone.toLowerCase());
 
-  const totalZonesCount = zonesList.length || 6;
-  const totalWorkersCount = scenario?.workers?.length ? scenario.workers.length * 92 : 184;
-  const totalMachinesCount = (scenario?.assets?.length || scenario?.machine_readings?.length || 42);
-  const totalPermitsCount = scenario?.permits?.length || 8;
+  const totalZonesCount = zonesList.length || 0;
+  const totalWorkersCount = scenario?.workers?.length ?? 0;
+  const totalMachinesCount = scenario?.assets?.length || scenario?.machine_readings?.length || 0;
+  const totalPermitsCount = scenario?.permits?.length || 0;
 
   return (
     <div className="page-canvas">

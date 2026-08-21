@@ -41,16 +41,7 @@ export default function App() {
   const [wsState, setWsState] = useState("idle");
   const socketRef = useRef(null);
 
-  // Load canonical sample scenario on initial startup
-  useEffect(() => {
-    api.sample("coke_oven_scenario")
-      .then((s) => {
-        if (s && s.name) {
-          setScenario(s);
-        }
-      })
-      .catch(() => {});
-  }, []);
+
 
   // Background health ping
   useEffect(() => {
@@ -263,7 +254,7 @@ export default function App() {
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        pendingApprovalsCount={result?.recommendation?.interventions?.length ?? 2}
+        pendingApprovalsCount={result?.recommendation?.interventions?.length ?? 0}
         operator={operator}
       />
 

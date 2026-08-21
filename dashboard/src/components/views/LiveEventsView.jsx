@@ -17,62 +17,7 @@ export default function LiveEventsView() {
     { tag: "H", desc: "Human Decision" },
   ];
 
-  const defaultEventsList = [
-    {
-      id: "ev-01",
-      timestamp: "21 Aug 00:09:41",
-      zone: "Gas Treatment",
-      type: "gas_anomaly",
-      class: "M",
-      label: "G-204 gas sensor exceeded 50 ppm threshold (measured 74 ppm)",
-      severity: "HIGH",
-    },
-    {
-      id: "ev-02",
-      timestamp: "21 Aug 00:08:26",
-      zone: "Gas Treatment",
-      type: "risk_prediction",
-      class: "P",
-      label: "XGBoost Gas Classifier predicted Methane (conf: 0.94)",
-      severity: "HIGH",
-    },
-    {
-      id: "ev-03",
-      timestamp: "21 Aug 00:07:52",
-      zone: "Battery 3",
-      type: "permit_status",
-      class: "M",
-      label: "Hot work permit HW-8821 active near Battery 3",
-      severity: "MEDIUM",
-    },
-    {
-      id: "ev-04",
-      timestamp: "21 Aug 00:07:15",
-      zone: "Gas Treatment",
-      type: "counterfactual",
-      class: "C",
-      label: "Causal engine computed minimum cut INT-2047 (residual risk 0.12)",
-      severity: "MEDIUM",
-    },
-    {
-      id: "ev-05",
-      timestamp: "21 Aug 00:06:14",
-      zone: "Coke Oven",
-      type: "telemetry",
-      class: "M",
-      label: "Pressure train A running nominal at 1.02 bar",
-      severity: "LOW",
-    },
-    {
-      id: "ev-06",
-      timestamp: "21 Aug 00:04:30",
-      zone: "Global",
-      type: "regulatory_cite",
-      class: "R",
-      label: "OSHA 1910.119 PSM Clause verified for Gas Isolation protocol",
-      severity: "LOW",
-    },
-  ];
+  const defaultEventsList = [];
 
   const fetchEvents = async () => {
     setRefreshing(true);

@@ -34,78 +34,12 @@ export default function InterventionsView({ selectedId = "INT-2047", scenario, r
     };
   });
 
-  const defaultInterventions = [
-    {
-      id: "INT-2047",
-      zone: "Gas Treatment",
-      title: "Isolate Gas Line G-204",
-      severity: "HIGH",
-      reduction: "-31%",
-      reversible: "YES",
-      subtitle: "Gas Treatment · Train A · reversible",
-      leverage:
-        "Stops the highest-confidence active edge between concentration and ignition probability.",
-      evidence: [
-        { label: "G-204", value: "74 ppm" },
-        { label: "Threshold", value: "50 ppm" },
-        { label: "Corroborating sensors", value: "3" },
-        { label: "Model confidence", value: "0.86" },
-      ],
-    },
-    {
-      id: "INT-2039",
-      zone: "Battery 3",
-      title: "Pause hot work permit HW-8821",
-      severity: "MEDIUM",
-      reduction: "-18%",
-      reversible: "YES",
-      subtitle: "Battery 3 · Welding Station B · reversible",
-      leverage: "Eliminates potential ignition source during elevated gas concentration.",
-      evidence: [
-        { label: "Permit ID", value: "HW-8821" },
-        { label: "Worker Count", value: "3 present" },
-        { label: "Distance to G-204", value: "14 meters" },
-        { label: "Model confidence", value: "0.92" },
-      ],
-    },
-    {
-      id: "INT-2012",
-      zone: "Gas Treatment",
-      title: "Restrict access to scrubber platform",
-      severity: "MEDIUM",
-      reduction: "-11%",
-      reversible: "YES",
-      subtitle: "Gas Treatment · Scrubber Deck · reversible",
-      leverage: "Prevents personnel exposure while gas dispersion remains unmitigated.",
-      evidence: [
-        { label: "Zone Access", value: "Restricted" },
-        { label: "Current Workers", value: "2 on deck" },
-        { label: "Exfiltration rate", value: "0.14 m³/s" },
-        { label: "Model confidence", value: "0.84" },
-      ],
-    },
-    {
-      id: "INT-1998",
-      zone: "Coke Oven",
-      title: "Increase ventilation rate, Train A",
-      severity: "LOW",
-      reduction: "-6%",
-      reversible: "YES",
-      subtitle: "Coke Oven · Fan Bank 1 · reversible",
-      leverage: "Accelerates clearance of accumulator vapor plume to safe lower explosive limit.",
-      evidence: [
-        { label: "Current Flow", value: "1.02 bar" },
-        { label: "Boost Target", value: "1.35 bar" },
-        { label: "Power Draw", value: "+12 kW" },
-        { label: "Model confidence", value: "0.78" },
-      ],
-    },
-  ];
+  const defaultInterventions = [];
 
   const interventions = dynamicInterventions.length > 0 ? dynamicInterventions : defaultInterventions;
 
   const selectedItem =
-    interventions.find((i) => i.id === activeInterventionId) || interventions[0];
+    interventions.find((i) => i.id === activeInterventionId) || interventions[0] || null;
 
   const handleApprove = async () => {
     setApproving(true);
@@ -151,7 +85,7 @@ export default function InterventionsView({ selectedId = "INT-2047", scenario, r
     }
   };
 
-  const isApproved = !!approvedRecords[selectedItem.id];
+  const isApproved = selectedItem ? !!approvedRecords[selectedItem.id] : false;
 
   return (
     <div className="page-canvas">
@@ -166,7 +100,8 @@ export default function InterventionsView({ selectedId = "INT-2047", scenario, r
         </div>
         <button
           className="action-btn teal"
-          onClick={() => setActiveInterventionId(interventions[0].id)}
+          onClick={() => interventions.length > 0 && setActiveInterventionId(interventions[0].id)}
+          disabled={interventions.length === 0}
         >
           <Sliders size={14} />
           <span>Open top recommendation</span>
@@ -249,142 +184,150 @@ export default function InterventionsView({ selectedId = "INT-2047", scenario, r
 
         {/* Right Column: Decision Record Panel */}
         <div className="panel-box decision-record-box">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              borderBottom: "1px solid #f1f5f9",
-              paddingBottom: 12,
-            }}
-          >
-            <div>
-              <span className="rec-code" style={{ fontSize: 11 }}>
-                {selectedItem.id}
-              </span>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
-                Decision record
-              </div>
-            </div>
-            <button
-              className="icon-button"
-              style={{ width: 28, height: 28 }}
-              onClick={() => {}}
-            >
-              <X size={14} />
-            </button>
-          </div>
-
-          <div>
-            <span className={`badge-pill ${selectedItem.severity.toLowerCase()}`}>
-              ● {selectedItem.severity}
-            </span>
-            <h2 style={{ fontSize: 18, fontWeight: 800, margin: "8px 0 2px 0", color: "#0f172a" }}>
-              {selectedItem.title}
-            </h2>
-            <div style={{ fontSize: 11.5, color: "#64748b", fontFamily: "var(--font-mono)" }}>
-              {selectedItem.subtitle}
-            </div>
-          </div>
-
-          {/* Causal Leverage */}
-          <div>
-            <div className="kpi-title" style={{ marginBottom: 4 }}>
-              CAUSAL LEVERAGE
-            </div>
-            <p style={{ fontSize: 12.5, color: "#334155", margin: 0, lineHeight: 1.5 }}>
-              {selectedItem.leverage}
-            </p>
-          </div>
-
-          {/* Evidence Packet */}
-          <div>
-            <div className="kpi-title" style={{ marginBottom: 8 }}>
-              EVIDENCE PACKET
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 8,
-                backgroundColor: "#f8fafc",
-                padding: 12,
-                borderRadius: 4,
-                border: "1px solid #e2e8f0",
-              }}
-            >
-              {selectedItem.evidence.map((ev, idx) => (
-                <div key={idx}>
-                  <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase" }}>
-                    {ev.label}
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", fontFamily: "var(--font-mono)" }}>
-                    {ev.value}
+          {selectedItem ? (
+            <>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  borderBottom: "1px solid #f1f5f9",
+                  paddingBottom: 12,
+                }}
+              >
+                <div>
+                  <span className="rec-code" style={{ fontSize: 11 }}>
+                    {selectedItem.id}
+                  </span>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
+                    Decision record
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Regulatory Citations */}
-          {result?.regulatory_citations?.length > 0 && (
-            <div>
-              <div className="kpi-title" style={{ marginBottom: 6 }}>REGULATORY EVIDENCE BASIS [R]</div>
-              <div style={{ fontSize: 11.5, color: "#475569", backgroundColor: "#f1f5f9", padding: 10, borderRadius: 4, borderLeft: "3px solid #0d9488" }}>
-                <b>{result.regulatory_citations[0].clause}</b>: {result.regulatory_citations[0].text}
+                <button
+                  className="icon-button"
+                  style={{ width: 28, height: 28 }}
+                  onClick={() => {}}
+                >
+                  <X size={14} />
+                </button>
               </div>
-            </div>
-          )}
 
-          {/* AI Recommends Box */}
-          <div className="decision-notice-banner">
-            <b>AI recommends, humans decide.</b> This action requires shift officer approval.
-          </div>
+              <div>
+                <span className={`badge-pill ${selectedItem.severity.toLowerCase()}`}>
+                  ● {selectedItem.severity}
+                </span>
+                <h2 style={{ fontSize: 18, fontWeight: 800, margin: "8px 0 2px 0", color: "#0f172a" }}>
+                  {selectedItem.title}
+                </h2>
+                <div style={{ fontSize: 11.5, color: "#64748b", fontFamily: "var(--font-mono)" }}>
+                  {selectedItem.subtitle}
+                </div>
+              </div>
 
-          {/* Action Button */}
-          {isApproved ? (
-            <div
-              style={{
-                padding: "12px 16px",
-                backgroundColor: "#ecfdf5",
-                border: "1.5px solid #10b981",
-                borderRadius: 4,
-                color: "#065f46",
-                fontSize: 12.5,
-                fontWeight: 600,
-                textAlign: "center",
-              }}
-            >
-              ✓ Decision #{approvedRecords[selectedItem.id]?.seq} Dispatched by{" "}
-              {approvedRecords[selectedItem.id]?.approver} at {approvedRecords[selectedItem.id]?.time}
-            </div>
+              {/* Causal Leverage */}
+              <div>
+                <div className="kpi-title" style={{ marginBottom: 4 }}>
+                  CAUSAL LEVERAGE
+                </div>
+                <p style={{ fontSize: 12.5, color: "#334155", margin: 0, lineHeight: 1.5 }}>
+                  {selectedItem.leverage}
+                </p>
+              </div>
+
+              {/* Evidence Packet */}
+              <div>
+                <div className="kpi-title" style={{ marginBottom: 8 }}>
+                  EVIDENCE PACKET
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 8,
+                    backgroundColor: "#f8fafc",
+                    padding: 12,
+                    borderRadius: 4,
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  {selectedItem.evidence.map((ev, idx) => (
+                    <div key={idx}>
+                      <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase" }}>
+                        {ev.label}
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", fontFamily: "var(--font-mono)" }}>
+                        {ev.value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Regulatory Citations */}
+              {result?.regulatory_citations?.length > 0 && (
+                <div>
+                  <div className="kpi-title" style={{ marginBottom: 6 }}>REGULATORY EVIDENCE BASIS [R]</div>
+                  <div style={{ fontSize: 11.5, color: "#475569", backgroundColor: "#f1f5f9", padding: 10, borderRadius: 4, borderLeft: "3px solid #0d9488" }}>
+                    <b>{result.regulatory_citations[0].clause}</b>: {result.regulatory_citations[0].text}
+                  </div>
+                </div>
+              )}
+
+              {/* AI Recommends Box */}
+              <div className="decision-notice-banner">
+                <b>AI recommends, humans decide.</b> This action requires shift officer approval.
+              </div>
+
+              {/* Action Button */}
+              {isApproved ? (
+                <div
+                  style={{
+                    padding: "12px 16px",
+                    backgroundColor: "#ecfdf5",
+                    border: "1.5px solid #10b981",
+                    borderRadius: 4,
+                    color: "#065f46",
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    textAlign: "center",
+                  }}
+                >
+                  ✓ Decision #{approvedRecords[selectedItem.id]?.seq} Dispatched by{" "}
+                  {approvedRecords[selectedItem.id]?.approver} at {approvedRecords[selectedItem.id]?.time}
+                </div>
+              ) : (
+                <div>
+                  <textarea
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      fontSize: 12,
+                      borderRadius: 4,
+                      border: "1px solid #e2e8f0",
+                      marginBottom: 10,
+                      boxSizing: "border-box",
+                      fontFamily: "var(--font-sans)",
+                    }}
+                    rows={2}
+                    placeholder="Reason or dispatch notes (optional)…"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                  />
+                  <button
+                    className="decision-action-btn"
+                    style={{ width: "100%" }}
+                    onClick={handleApprove}
+                    disabled={approving}
+                  >
+                    <ShieldAlert size={16} />
+                    <span>{approving ? "Dispatching…" : "Send for approval / Dispatch"}</span>
+                  </button>
+                </div>
+              )}
+            </>
           ) : (
-            <div>
-              <textarea
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  fontSize: 12,
-                  borderRadius: 4,
-                  border: "1px solid #e2e8f0",
-                  marginBottom: 10,
-                  boxSizing: "border-box",
-                  fontFamily: "var(--font-sans)",
-                }}
-                rows={2}
-                placeholder="Reason or dispatch notes (optional)…"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-              <button
-                className="decision-action-btn"
-                style={{ width: "100%" }}
-                onClick={handleApprove}
-                disabled={approving}
-              >
-                <ShieldAlert size={16} />
-                <span>{approving ? "Dispatching…" : "Send for approval / Dispatch"}</span>
-              </button>
+            <div style={{ textAlign: "center", padding: "40px 0", color: "#64748b" }}>
+              No active interventions recommended.
             </div>
           )}
         </div>
