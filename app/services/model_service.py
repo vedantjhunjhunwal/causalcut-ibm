@@ -473,7 +473,7 @@ def get_settings_confidence() -> float:
 # --------------------------------------------------------------------------- #
 class VisionModelService(BaseModelService):
     name = "vision_yolov8_ppe"
-    version = "yolov8n-ppe-1.0"
+    version = "yolov8m-ppe-1.0"
     required_deps = ("torch", "ultralytics")
 
     def _smoke_check(self) -> None:
@@ -482,14 +482,16 @@ class VisionModelService(BaseModelService):
 
     def __init__(self, model_path: str | None = None) -> None:
         super().__init__()
-        primary_path = Path(model_path or str(_REPO_ROOT / "models" / "yolov8_ppe.pt"))
+        primary_path = Path(model_path or str(_REPO_ROOT / ".models" / "yolov8m_ppe_cctv.pt"))
         if not primary_path.exists():
-            self._path = None
+            self._path = "yolov8n.pt"
         else:
             self._path = str(primary_path)
         self._detector = None
 
     def artifact_found(self) -> bool:
+        if self.artifact_path == "yolov8n.pt":
+            return True
         return self._path is not None and Path(self._path).exists()
 
     def _load(self) -> None:
@@ -499,7 +501,15 @@ class VisionModelService(BaseModelService):
         if src not in sys.path:
             sys.path.insert(0, src)
         from inference.yolo_detector import YOLODetector  # type: ignore
-        self._detector = YOLODetector(model_path=self._path)
+        import json
+        
+        try:
+            with open(str(_REPO_ROOT / "app" / "class_thresholds.json")) as f:
+                thresholds = json.load(f)
+        except Exception:
+            thresholds = None
+
+        self._detector = YOLODetector(model_path=self._path, confidence_thresholds=thresholds)
 
     @property
     def artifact_path(self) -> str | None:

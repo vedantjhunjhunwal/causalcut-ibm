@@ -224,16 +224,28 @@ def generate_model_events(
             detections = detections.to_dict()
         if isinstance(detections, dict):
             detections = detections.get("detections", [])
-        # PPE classes the model reports as ABSENT constitute a violation.
-        classes = {str(d.get("class") or d.get("label", "")).lower()
+        # With the v3 vision package, violations are explicitly detected
+        classes = {str(d.get("class_name") or d.get("class") or d.get("label", "")).lower()
                    for d in detections if isinstance(d, dict)}
-        missing = [ppe for ppe in ("hard_hat", "helmet", "vest")
-                   if ppe not in classes and "person" in classes]
+        
+        missing = []
+        if "no_hat" in classes:
+            missing.append("hard_hat")
+        if "no_vest" in classes:
+            missing.append("vest")
+            
+        # Fallback for when person is detected but no explicit hat/vest class is found 
+        # (Though usually it detects either hard_hat or no_hat)
+        if not missing and "person" in classes:
+            if "hard_hat" not in classes and "helmet" not in classes:
+                missing.append("hard_hat")
+            if "safety_vest" not in classes and "vest" not in classes:
+                missing.append("vest")
         if missing:
             events.append(SafetyEvent(
                 factory_id=scenario.factory_id,
                 zone_id=v.zone_id,
-                worker_id=v.worker_id,
+                worker_id=v.worker_id or "unknown",
                 event_type="ppe_violation",
                 event_time=anchor + timedelta(seconds=v.offset_seconds),
                 value={

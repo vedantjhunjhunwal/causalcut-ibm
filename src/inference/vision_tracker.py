@@ -123,21 +123,18 @@ def _associate_ppe(
     persons: list[dict],
     ppe_items: list[Detection],
 ) -> list[dict]:
-    """Associate PPE detections with the nearest tracked person.
-
-    For each PPE detection, finds the person whose bounding box contains
-    it most (by containment ratio).  If no person contains it above the
-    threshold, the PPE item is dropped (likely a false positive).
-    """
-    # Start with all detectable PPE set to False (absent)
+    """Associate PPE detections with the nearest tracked person."""
+    # Start with all detectable PPE set to True (assumed compliant unless violation found)
+    # Actually, let's set to None (unknown) until we see a detection
     for p in persons:
         ppe_state = {}
         for item in ALL_PPE_ITEMS:
             if item in DETECTABLE_PPE:
-                ppe_state[item] = False
+                ppe_state[item] = None
             else:
-                ppe_state[item] = None  # can't detect this item
+                ppe_state[item] = None
         p["ppe"] = ppe_state
+        p["violations"] = []
 
     for ppe_det in ppe_items:
         best_person = None
@@ -145,8 +142,6 @@ def _associate_ppe(
 
         for p in persons:
             person_box = p["bbox_xyxy"]
-            # For small PPE items (hard hat on top of head), containment
-            # is a better signal than IoU.
             score = _containment_ratio(ppe_det.bbox_xyxy, person_box)
             iou = _iou(ppe_det.bbox_xyxy, person_box)
             combined = max(score, iou)
@@ -156,7 +151,17 @@ def _associate_ppe(
                 best_person = p
 
         if best_person is not None and best_score >= PPE_CONTAINMENT_THRESHOLD:
-            best_person["ppe"][ppe_det.class_name] = True
+            # Check if it's a violation or compliance class
+            if ppe_det.class_name == "hard_hat":
+                best_person["ppe"]["hard_hat"] = True
+            elif ppe_det.class_name == "no_hat":
+                best_person["ppe"]["hard_hat"] = False
+                best_person["violations"].append(ppe_det)
+            elif ppe_det.class_name == "safety_vest":
+                best_person["ppe"]["safety_vest"] = True
+            elif ppe_det.class_name == "no_vest":
+                best_person["ppe"]["safety_vest"] = False
+                best_person["violations"].append(ppe_det)
 
     return persons
 
@@ -202,6 +207,20 @@ class VisionTracker:
             "minimum_matching_threshold": minimum_matching_threshold,
             "frame_rate": frame_rate,
         }
+        try:
+            import yaml
+            cfg_path = Path("bytetrack_factory.yaml")
+            if cfg_path.exists():
+                with open(cfg_path) as f:
+                    cfg = yaml.safe_load(f)
+                if "new_track_thresh" in cfg:
+                    self._tracker_config["track_activation_threshold"] = cfg["new_track_thresh"]
+                if "track_buffer" in cfg:
+                    self._tracker_config["lost_track_buffer"] = cfg["track_buffer"]
+                if "match_thresh" in cfg:
+                    self._tracker_config["minimum_matching_threshold"] = cfg["match_thresh"]
+        except Exception:
+            pass
         self._frame_count = 0
         # track_id -> worker_id mapping (auto-assigned)
         self._track_to_worker: dict[int, str] = {}
