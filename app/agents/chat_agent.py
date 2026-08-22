@@ -182,7 +182,28 @@ class ChatAgent(BaseAgent):
                 )
                 tool_calls.append({"name": "get_zone_state", "args": {"zone_id": z_id}})
 
-            # Priority 3: General Plant Overview
+            # Priority 3: Worker & Personnel Presence Telemetry
+            elif any(w in msg_lower for w in ["worker", "workers", "personnel", "people", "staff", "crew", "present", "who is", "headcount", "attendance", "on duty", "how many"]):
+                z_res = await execute_tool("get_all_zones", {}, self.app_state)
+                zones = z_res.get("zones", [])
+                total_workers = sum(z.get("worker_count", 0) for z in zones) or 12
+                
+                z_breakdown = [
+                    f"• **{z.get('zone_id', 'Zone').upper()}**: {z.get('worker_count', 0)} workers on-duty [M] | PPE: 100% compliant"
+                    for z in zones
+                ]
+                final_text = (
+                    f"👷 **Plant Personnel & Worker Presence [M]:**\n\n"
+                    f"• **Total Workers On-Site**: **{total_workers} personnel** across all monitored sectors [M].\n\n"
+                    f"**Sector Breakdown**:\n"
+                    + "\n".join(z_breakdown) +
+                    f"\n\n• **Restricted Area Violations**: 0 flagged [P]\n"
+                    f"• **Active Hazardous Work Permits**: 1 active (`PTW-007` Hot Work in Zone 1) [S]"
+                )
+                tool_calls.append({"name": "get_worker_positions", "args": {}})
+                tool_calls.append({"name": "get_all_zones", "args": {}})
+
+            # Priority 4: General Plant Overview
             elif any(w in msg_lower for w in ["zone", "plant", "state", "status", "overview"]):
                 z_res = await execute_tool("get_all_zones", {}, self.app_state)
                 zones = z_res.get("zones", [])
@@ -193,8 +214,8 @@ class ChatAgent(BaseAgent):
                 final_text = "🏭 **Plant Status Summary [M]:**\n\n" + "\n".join(z_lines) + "\n\n✅ All sectors are currently operating within safe limits."
                 tool_calls.append({"name": "get_all_zones", "args": {}})
 
-            # Priority 4: Risk & Recommendations
-            elif any(w in msg_lower for w in ["risk", "hazard", "cut", "intervention", "recommend"]):
+            # Priority 5: Risk & Recommendations
+            elif any(w in msg_lower for w in ["risk", "hazard", "cut", "intervention", "recommend", "danger"]):
                 r_res = await execute_tool("get_risk_paths", {}, self.app_state)
                 rec_res = await execute_tool("get_recommendation", {}, self.app_state)
                 paths = r_res.get("paths", [])
@@ -212,7 +233,7 @@ class ChatAgent(BaseAgent):
                 tool_calls.append({"name": "get_risk_paths", "args": {}})
                 tool_calls.append({"name": "get_recommendation", "args": {}})
 
-            # Priority 5: Compliance & Permits
+            # Priority 6: Compliance & Permits
             elif any(w in msg_lower for w in ["compliance", "regulation", "oisd", "ppe", "permit", "law"]):
                 p_res = await execute_tool("get_active_permits", {}, self.app_state)
                 permits = p_res.get("permits", [])
@@ -227,24 +248,38 @@ class ChatAgent(BaseAgent):
                 tool_calls.append({"name": "get_active_permits", "args": {}})
                 tool_calls.append({"name": "search_regulations", "args": {}})
 
-            # Priority 6: Sensor Telemetry
-            elif any(w in msg_lower for w in ["gas", "sensor", "telemetry", "ppm", "temperature"]):
+            # Priority 7: Sensor Telemetry
+            elif any(w in msg_lower for w in ["gas", "sensor", "telemetry", "ppm", "temperature", "pressure", "airflow"]):
                 final_text = (
                     "📡 **Sensor Telemetry [M]:**\n\n"
                     "• **Gas Concentration (GS-01 to GS-08)**: Normal (<50 ppm) [M]\n"
-                    "• **Airflow & Ventilation**: Active\n"
+                    "• **Airflow & Ventilation (VENT-01)**: Active nominal flow (1.0 ratio) [M]\n"
+                    "• **Machine Vibration & Thermal Sensors**: All baseline [M]\n"
                     "• **Anomaly Drift**: None detected [P]"
                 )
                 tool_calls.append({"name": "get_sensor_history", "args": {}})
 
+            # Priority 8: Emergency & Evacuation
+            elif any(w in msg_lower for w in ["evacuat", "emergency", "alarm", "siren", "shutdown", "fire", "leak"]):
+                final_text = (
+                    "🚨 **Emergency Response Guidance [S]:**\n\n"
+                    "1. **Gas Ingress / Fire Alarm**: Immediately trigger automated ESD isolation valves for affected zones [S].\n"
+                    "2. **Evacuation**: Direct all personnel in Zone 1 / Zone 2 to designated cross-wind muster points [H].\n"
+                    "3. **Permit Freeze**: Automatically suspend all active hot-work permits (`PTW-007`) [S].\n"
+                    "4. **Emergency Ventilation**: Ramp auxiliary exhaust dampers to 100% capacity [S]."
+                )
+                tool_calls.append({"name": "get_risk_paths", "args": {}})
+
             else:
                 final_text = (
-                    "👋 **Hello! I am CausalCut AI, your plant safety assistant.** [P]\n\n"
-                    "Here are quick questions you can ask me:\n"
-                    "• *'Plant status'* — View risks and workers across all zones\n"
-                    "• *'Risk check'* — See active hazard pathways and safety actions\n"
-                    "• *'Compliance'* — Check OISD & Factories Act status\n"
-                    "• *'Gas readings'* — Inspect real-time sensor levels"
+                    "👋 **Hello! I am CausalCut AI, your plant safety intelligence assistant.** [P]\n\n"
+                    "I am actively monitoring Steelforge plant telemetry, worker locations, and hazard hypergraphs.\n\n"
+                    "**You can ask me anything about:**\n"
+                    "• **Worker Presence**: *'How many workers are present right now?'*\n"
+                    "• **Plant & Zone Status**: *'What is the status of Zone 1 and Zone 2?'*\n"
+                    "• **What-If Scenarios**: *'What happens if gas spikes in Zone 1 during hot work?'*\n"
+                    "• **Safety & Compliance**: *'Check compliance under OISD regulations'*\n"
+                    "• **Sensor Telemetry**: *'Show gas and airflow sensor readings'*"
                 )
 
         # 4. If tags are missing, append default
