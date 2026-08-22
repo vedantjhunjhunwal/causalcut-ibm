@@ -1,9 +1,53 @@
+# === Git & VCS ===
+.git/
+.gitignore
+
+# === Python artifacts ===
 __pycache__/
 *.pyc
 .pytest_cache/
+.venv/
+
+# === Runtime data (created at boot, not baked in) ===
 data/
+
+# === Secrets ===
 .env
-dashboard/node_modules/
-dashboard/dist/
-.git/
+.env.*
+
+# === Frontend (deployed separately on Vercel) ===
+dashboard/
+et-ai-hackathon-feature-landing-page-ui/
+
+# === Datasets & large archives ===
+.datasets/
+*.zip
+
+# === Non-essential directories ===
+benchmarks/
+causalcut_test_suite/
+docs/
+explanations/
+graphify-out/
+risk_priors/
+scratch/
 tests/
+vedant/
+docker/
+
+# === IDE / OS ===
+.agents/
+.vscode/
+.idea/
+.DS_Store
+*.suo
+*.sln
+
+# === Notebooks & reports ===
+*.ipynb
+*.md
+*.svg
+*.yaml
+!requirements.txt
+!requirements-full.txt
+!bytetrack_factory.yaml
