@@ -18,7 +18,7 @@ class AgentService:
             raise ValueError("CAUSALCUT_GEMINI_API_KEY is not set.")
         
         self.client = genai.Client(api_key=api_key)
-        self.model_name = "gemini-3.1-flash-lite"
+        self.model_name = "gemini-2.5-flash-lite"
         
         # Define agent tools
         self.tools = [

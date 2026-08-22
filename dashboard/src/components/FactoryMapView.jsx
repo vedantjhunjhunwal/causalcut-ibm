@@ -1,6 +1,19 @@
 import React from "react";
 import FactoryMap from "./FactoryMap";
 
+// Default Steelforge zone layout — shown before any scenario/graph data loads.
+// Zone IDs must match the STEELFORGE_LAYOUT keys in FactoryMap.jsx so the
+// hardcoded coordinates are used and the map is always visible.
+const DEFAULT_ZONES = [
+  { zone_id: "zone-cnc",   name: "CNC Machining Floor",  hazard_class: "standard" },
+  { zone_id: "zone-hyd",   name: "Hydraulic Press Bay",  hazard_class: "high_risk" },
+  { zone_id: "zone-gas",   name: "Gas Storage",          hazard_class: "gas_hazard" },
+  { zone_id: "zone-ppe",   name: "PPE Check",            hazard_class: "standard" },
+  { zone_id: "zone-ctrl",  name: "Control Room",         hazard_class: "standard" },
+  { zone_id: "zone-break", name: "Break Room",           hazard_class: "standard" },
+  { zone_id: "zone-entry", name: "Entry",                hazard_class: "standard" },
+];
+
 export default function FactoryMapView({
   zoneRisk = {},
   graph = { nodes: [], edges: [] },
@@ -12,22 +25,27 @@ export default function FactoryMapView({
   const nodes = graph.nodes || [];
   const edges = graph.edges || [];
 
-  // Fallback to scenario data if graph has not run yet
+  // Prefer graph nodes > scenario zones > hardcoded default layout
   const graphZones = nodes.filter((n) => n.type === "zone");
-  const zones = graphZones.length > 0 ? graphZones : (scenario?.zones || []);
-  
+  const scenarioZones = scenario?.zones || [];
+  const zones = graphZones.length > 0
+    ? graphZones
+    : scenarioZones.length > 0
+      ? scenarioZones
+      : DEFAULT_ZONES;
+
   const graphSensors = nodes.filter((n) => n.type === "sensor");
   const sensors = graphSensors.length > 0 ? graphSensors : (scenario?.sensors || []);
-  
+
   const graphWorkers = nodes.filter((n) => n.type === "worker");
   const workers = graphWorkers.length > 0 ? graphWorkers : (scenario?.workers || []);
-  
+
   const graphAssets = nodes.filter((n) => n.type === "asset");
   const assets = graphAssets.length > 0 ? graphAssets : (scenario?.assets || []);
-  
+
   const graphPermits = nodes.filter((n) => n.type === "permit");
   const permits = graphPermits.length > 0 ? graphPermits : (scenario?.permits || []);
-  
+
   // Extract rules from graph nodes if any
   const rules = nodes.filter((n) => n.type === "rule");
   // Merge with activatedRules prop if provided separately

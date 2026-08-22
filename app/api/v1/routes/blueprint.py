@@ -1,7 +1,7 @@
 """Blueprint ingestion & analysis routes.
 
 POST /blueprints/analyze  — takes a base64-encoded blueprint image +
-                            industry context, calls Gemini 2.5 Flash Lite
+                            industry context, calls Gemini 3.1 Flash Lite
                             vision, returns zones/adjacency/sensors JSON
                             directly compatible with the Scenario schema.
 
@@ -174,7 +174,7 @@ Rules:
 # --------------------------------------------------------------------------- #
 
 def _call_gemini(image_b64: str, image_mime: str, prompt: str) -> dict[str, Any]:
-    """Call Gemini 2.5 Flash Lite with the blueprint image and return parsed JSON."""
+    """Call Gemini 3.1 Flash Lite with the blueprint image and return parsed JSON."""
     try:
         from google import genai                          # type: ignore
         from google.genai import types as gtypes         # type: ignore
@@ -349,7 +349,7 @@ def _validate_and_clean(raw: dict[str, Any]) -> dict[str, Any]:
     response_model=BlueprintAnalyzeResponse,
     summary="Analyze a factory blueprint image with Gemini Vision",
     description=(
-        "Accepts a base64-encoded blueprint image and calls Gemini 2.5 Flash Lite "
+        "Accepts a base64-encoded blueprint image and calls Gemini 3.1 Flash Lite "
         "to extract zones, adjacencies, and suggested sensors. The returned JSON "
         "is directly compatible with the Scenario schema's `zones`, `zone_adjacency`, "
         "and `sensors` fields. Coordinates are normalized (0–1) relative to image size."

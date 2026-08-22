@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import BlueprintCanvas from "../BlueprintCanvas";
 import "./OnboardingFlow.css";
@@ -22,9 +23,12 @@ const INDUSTRY_HAZARD_DEFAULTS = {
 };
 
 export default function OnboardingFlow() {
-  const { session, setFactory } = useAuth();
+  const { session, userProfile, addFactory } = useAuth();
+  const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [savedFloors, setSavedFloors] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   // Step 1 — Factory details
   const [factoryForm, setFactoryForm] = useState({
@@ -104,6 +108,10 @@ export default function OnboardingFlow() {
     setAnalysisError(null);
     setStep(2);
 
+    const industryType = session?.user?.user_metadata?.industryType
+      || userProfile?.industry_type
+      || "general";
+
     try {
       const res = await fetch(`${API_BASE}/blueprints/analyze`, {
         method: "POST",
@@ -111,7 +119,7 @@ export default function OnboardingFlow() {
         body: JSON.stringify({
           image_b64: imageB64,
           image_mime: imageMime,
-          industry_type: session.industryType,
+          industry_type: industryType,
           factory_name: factoryForm.name,
           floor_label: factoryForm.floor,
         }),
@@ -383,8 +391,13 @@ export default function OnboardingFlow() {
             </div>
 
             <div className="ob-actions ob-actions-row" style={{ marginTop: "24px" }}>
-              <button 
-                className="ob-btn-ghost" 
+              {saveError && (
+                <div style={{ width: "100%", padding: "10px 14px", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "8px", color: "#f87171", fontSize: "13px", marginBottom: "12px" }}>
+                  ⚠ {saveError}
+                </div>
+              )}
+              <button
+                className="ob-btn-ghost"
                 onClick={() => {
                   setImageFile(null);
                   setImagePreview(null);
@@ -397,18 +410,27 @@ export default function OnboardingFlow() {
                 + Add Another Floor
               </button>
               <button
+                id="ob-finish-setup"
                 className="ob-btn-primary"
-                onClick={() => {
-                  setFactory({
-                    name: factoryForm.name,
-                    location: factoryForm.location,
-                    industryType: session.industryType,
-                    floors: savedFloors,
-                    createdAt: Date.now(),
-                  });
+                disabled={saving}
+                onClick={async () => {
+                  setSaving(true);
+                  setSaveError(null);
+                  try {
+                    await addFactory({
+                      name: factoryForm.name,
+                      location: factoryForm.location,
+                      industryType: userProfile?.industry_type || "general",
+                      floors: savedFloors,
+                    });
+                    navigate("/factories", { replace: true });
+                  } catch (err) {
+                    setSaveError(err.message || "Failed to save factory. Please try again.");
+                    setSaving(false);
+                  }
                 }}
               >
-                Finish Factory Setup →
+                {saving ? "Saving…" : "Finish Factory Setup →"}
               </button>
             </div>
           </div>

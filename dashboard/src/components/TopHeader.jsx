@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Bell, LogOut } from "lucide-react";
+import { Bell, LogOut, ChevronLeft } from "lucide-react";
 
-export default function TopHeader({ facility = "Steel Plant — Coke Oven Facility", isMonitoring = true, onLogout }) {
+export default function TopHeader({ facility = "Steel Plant — Coke Oven Facility", isMonitoring = true, onLogout, onBackToHub }) {
   const [currentTime, setCurrentTime] = useState("");
 
   useEffect(() => {
@@ -29,6 +29,32 @@ export default function TopHeader({ facility = "Steel Plant — Coke Oven Facili
   return (
     <header className="top-header">
       <div className="facility-badge-group">
+        {onBackToHub && (
+          <button
+            onClick={onBackToHub}
+            title="Back to My Factories"
+            style={{
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "6px",
+              padding: "4px 8px",
+              color: "rgba(255,255,255,0.5)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "2px",
+              fontSize: "11px",
+              fontWeight: 600,
+              letterSpacing: "0.04em",
+              marginRight: "8px",
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.8)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.5)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
+          >
+            <ChevronLeft size={12} /> MY FACTORIES
+          </button>
+        )}
         <span className="facility-label">ACTIVE FACILITY</span>
         <span className="facility-name">{facility}</span>
       </div>

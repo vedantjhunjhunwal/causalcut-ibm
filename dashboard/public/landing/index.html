@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CAUSALCUT — Minimum-Causal-Cut Safety Twin</title>
+  <meta name="description" content="CAUSALCUT computes the mathematical minimum causal cut to break compound accident chains in heavy manufacturing — before disaster strikes." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════ NAVBAR ═══════════════════════ -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-logo">
+      <svg class="logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <circle cx="6" cy="6" r="3" fill="#4A8CB5"/>
+        <circle cx="18" cy="6" r="3" fill="#4A8CB5"/>
+        <circle cx="12" cy="18" r="3" fill="#F26522"/>
+        <line x1="6" y1="6" x2="18" y2="6" stroke="#4A8CB5" stroke-width="1.5"/>
+        <line x1="6" y1="6" x2="12" y2="18" stroke="#4A8CB5" stroke-width="1.5"/>
+        <line x1="18" y1="6" x2="12" y2="18" stroke="#F26522" stroke-width="1.5" stroke-dasharray="3 2"/>
+      </svg>
+      <span class="logo-text">CAUSALCUT</span>
+    </div>
+
+    <ul class="nav-links">
+      <li><a href="#hero" class="nav-link active" id="nav-overview">OVERVIEW</a></li>
+      <li><a href="#how-it-works" class="nav-link" id="nav-how">HOW IT WORKS</a></li>
+      <li><a href="#visualizer" class="nav-link" id="nav-visualizer">CUT ENGINE</a></li>
+      <li><a href="#docs" class="nav-link" id="nav-docs">DOCS</a></li>
+    </ul>
+
+    <div class="nav-actions">
+      <a href="/auth" class="nav-signin" id="btn-signin">Sign In</a>
+      <button class="btn-get-started" id="btn-get-started" onclick="window.top.location.href='/auth?tab=register'">
+        Get Started
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M2 12L12 2M12 2H5M12 2V9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SECTION 1 — HERO
+       ═══════════════════════════════════════════════════════════ -->
+  <section class="scene hero-scene" id="hero">
+    <div class="orange-strip" aria-hidden="true"></div>
+
+    <!-- Complete Pristine Factory Image Layer -->
+    <div class="factory-layer" id="factory-layer">
+      <img
+        src="Gemini_Generated_Image_8j6mzm8j6mzm8j6m.png"
+        alt="Industrial factory plant — steel manufacturing environment"
+        class="factory-img"
+        id="factory-image"
+      />
+    </div>
+
+    <div class="hero-text-layer">
+      <h1 class="hero-title" id="hero-title">
+        <span class="line-1">CAUSAL</span>
+        <span class="line-2">CUT</span>
+      </h1>
+      <p class="hero-subtitle">MINIMUM-CAUSAL-CUT SAFETY TWIN FOR INDUSTRIAL PLANTS</p>
+    </div>
+
+    <div class="left-content">
+      <div class="block-tag">
+        <span class="block-label">LIVE THREAT ANALYSIS</span>
+        <span class="systems-status">
+          <span class="status-dot"></span>
+          HYPERGRAPH ACTIVE &mdash; ALL MODELS ONLINE
+        </span>
+      </div>
+
+      <div class="alert-card" id="alert-risk">
+        <div class="alert-header">
+          <div class="alert-title-row">
+            <span class="alert-badge">⚠</span>
+            <div>
+              <div class="alert-title">3 RISK PATHS DETECTED</div>
+              <div class="alert-sub">COMPOUND CHAIN &mdash; <span id="hero-clock">14:37:52</span></div>
+            </div>
+          </div>
+          <button class="alert-expand" aria-label="Expand alert" id="btn-alert-expand">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 12L12 2M12 2H5M12 2V9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <p class="alert-desc">Gas leak → Hydraulic pressure loss → Permit mismatch detected. Minimum cut computed: <strong>1 intervention</strong>.</p>
+        <button class="alert-action" id="btn-sever-chain">
+          SEVER FAILURE CHAIN
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 7H13M13 7L7 1M13 7L7 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+
+      <div class="unit-card" id="unit-card">
+        <div class="unit-badge">C1</div>
+        <div class="unit-info">
+          <div class="unit-sector">COKE OVEN <strong>BLOCK A</strong></div>
+          <div class="unit-message">OR-Tools solver returned optimal cut in 147ms</div>
+          <button class="unit-switch" id="btn-switch-unit">VIEW RECOMMENDATION <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 6H11M11 6L6 1M11 6L6 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="right-sidebar" id="right-sidebar">
+      <div class="sidebar-card climate-card" id="threat-card">
+        <div class="card-label">THREAT LEVEL</div>
+        <div class="temp-display"><span class="temp-value" id="threat-level">03</span></div>
+        <div class="temp-status critical">ACTIVE RISK PATHS</div>
+        <div class="metric-row">
+          <span class="metric-label">HYPERGRAPH</span>
+          <span class="metric-badge on">LIVE</span>
+        </div>
+        <div class="chart-wrapper">
+          <div class="chart-y-labels"><span>8</span><span>6</span><span>4</span><span>2</span><span>0</span></div>
+          <div class="chart-container" id="threat-chart">
+            <svg class="sparkline" viewBox="0 0 200 60" preserveAspectRatio="none">
+              <defs><linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#F26522" stop-opacity="0.25"/><stop offset="100%" stop-color="#F26522" stop-opacity="0"/></linearGradient></defs>
+              <path class="spark-area" d="M0,50 C20,45 35,38 55,42 C75,32 90,48 110,25 C130,15 145,30 165,20 C180,28 190,18 200,12 L200,60 L0,60 Z" fill="url(#sparkGrad)"/>
+              <path class="spark-line" d="M0,50 C20,45 35,38 55,42 C75,32 90,48 110,25 C130,15 145,30 165,20 C180,28 190,18 200,12" fill="none" stroke="#F26522" stroke-width="1.5"/>
+            </svg>
+            <div class="chart-labels"><span>06:00</span><span>12:00</span><span>18:00</span><span>NOW</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-card reactor-card" id="model-card">
+        <div class="card-header-row">
+          <div class="card-label">SOLVER STATUS</div>
+          <button class="info-btn" aria-label="Info" id="btn-solver-info">ⓘ</button>
+        </div>
+        <div class="reactor-gauges">
+          <div class="gauge-item"><div class="gauge-wrap">
+            <svg class="gauge-svg" viewBox="0 0 80 80" id="gauge-cut"><circle class="gauge-track" cx="40" cy="40" r="30"/><circle class="gauge-fill cut-fill" cx="40" cy="40" r="30" stroke-dasharray="113" stroke-dashoffset="35" transform="rotate(-90 40 40)"/></svg>
+            <div class="gauge-center"><div class="gauge-value">147</div><div class="gauge-unit">ms</div><div class="gauge-ppm">SOLVE</div></div>
+          </div></div>
+          <div class="gauge-item"><div class="gauge-wrap">
+            <svg class="gauge-svg" viewBox="0 0 80 80" id="gauge-models"><circle class="gauge-track" cx="40" cy="40" r="30"/><circle class="gauge-fill model-fill" cx="40" cy="40" r="30" stroke-dasharray="113" stroke-dashoffset="28" transform="rotate(-90 40 40)"/></svg>
+            <div class="gauge-center"><div class="gauge-value">4/4</div><div class="gauge-unit">ML</div><div class="gauge-ppm">MODELS</div></div>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="sidebar-card links-card" id="links-card">
+        <div class="quick-link" id="link-monitoring">
+          <div class="quick-link-info"><div class="quick-label">INGESTION SPINE</div><div class="quick-status active-status">STREAMING</div></div>
+          <button class="expand-btn" aria-label="Expand" id="btn-monitoring">+</button>
+        </div>
+        <div class="divider"></div>
+        <div class="quick-link" id="link-incident">
+          <div class="quick-label">AUDIT LEDGER</div>
+          <button class="expand-btn" aria-label="Expand" id="btn-incident">+</button>
+        </div>
+        <div class="divider"></div>
+        <div class="quick-link" id="link-logs">
+          <div class="quick-label">APPROVAL GATEWAY</div>
+          <button class="expand-btn" aria-label="Expand" id="btn-logs">+</button>
+        </div>
+      </div>
+      <div class="sidebar-footer">&copy; 2026 CAUSALCUT</div>
+    </aside>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SECTION 2 — HOW IT WORKS (3-layer pipeline)
+       ═══════════════════════════════════════════════════════════ -->
+  <section class="s2" id="how-it-works">
+    <div class="s2-inner">
+
+      <div class="s2-header anim-target" data-anim="fade-up">
+        <span class="s2-label">PLATFORM</span>
+        <h2 class="s2-title">Three layers between<br/>a sensor reading and a saved life.</h2>
+        <p class="s2-desc">Every event flows through a deterministic pipeline — ingestion, analysis, and human-approved action — with full auditability at each stage.</p>
+      </div>
+
+      <!-- Pipeline steps -->
+      <div class="pipeline">
+
+        <div class="pipe-step anim-target" data-anim="fade-up">
+          <div class="pipe-number">01</div>
+          <div class="pipe-body">
+            <div class="pipe-icon-wrap">
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <path d="M4 14C4 8.477 8.477 4 14 4s10 4.477 10 10" stroke="#4A8CB5" stroke-width="2" stroke-linecap="round"/>
+                <path d="M24 14c0 5.523-4.477 10-10 10S4 19.523 4 14" stroke="#F26522" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3"/>
+                <circle cx="14" cy="14" r="3" fill="#4A8CB5"/>
+              </svg>
+            </div>
+            <h3 class="pipe-title">Ingestion Spine</h3>
+            <p class="pipe-desc">FastAPI endpoint ingests gas readings, machine states, worker permits, and zone events in real time. Async queue with backpressure writes to a SQLite WAL state store — no event is ever dropped.</p>
+            <div class="pipe-tags">
+              <span class="pipe-tag">FastAPI</span>
+              <span class="pipe-tag">SQLite WAL</span>
+              <span class="pipe-tag">AsyncIO</span>
+            </div>
+            <div class="pipe-metric">
+              <span class="pipe-metric-val">~2,400</span>
+              <span class="pipe-metric-unit">events/min sustained throughput</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pipe-connector" aria-hidden="true"><div class="pipe-line"></div></div>
+
+        <div class="pipe-step anim-target" data-anim="fade-up">
+          <div class="pipe-number">02</div>
+          <div class="pipe-body">
+            <div class="pipe-icon-wrap">
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <circle cx="8" cy="8" r="3" stroke="#F26522" stroke-width="1.5" fill="none"/>
+                <circle cx="20" cy="8" r="3" stroke="#F26522" stroke-width="1.5" fill="none"/>
+                <circle cx="14" cy="20" r="3" stroke="#4A8CB5" stroke-width="1.5" fill="none"/>
+                <line x1="8" y1="11" x2="14" y2="17" stroke="#F26522" stroke-width="1.2"/>
+                <line x1="20" y1="11" x2="14" y2="17" stroke="#F26522" stroke-width="1.2"/>
+                <line x1="11" y1="8" x2="17" y2="8" stroke="#F26522" stroke-width="1.2"/>
+              </svg>
+            </div>
+            <h3 class="pipe-title">Analytical Engine</h3>
+            <p class="pipe-desc">Plant topology becomes a dynamic safety hypergraph in NetworkX. Four trained ML models (XGBoost, LightGBM, Isolation Forest) classify anomalies. OR-Tools solves the minimum causal cut. SimPy runs counterfactual simulations before anything is deployed.</p>
+            <div class="pipe-tags">
+              <span class="pipe-tag">NetworkX</span>
+              <span class="pipe-tag">OR-Tools</span>
+              <span class="pipe-tag">SimPy</span>
+              <span class="pipe-tag">XGBoost</span>
+              <span class="pipe-tag">LightGBM</span>
+            </div>
+            <div class="pipe-metric">
+              <span class="pipe-metric-val">&lt;200ms</span>
+              <span class="pipe-metric-unit">cut computation end-to-end</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pipe-connector" aria-hidden="true"><div class="pipe-line"></div></div>
+
+        <div class="pipe-step anim-target" data-anim="fade-up">
+          <div class="pipe-number">03</div>
+          <div class="pipe-body">
+            <div class="pipe-icon-wrap">
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <rect x="5" y="5" width="18" height="18" rx="3" stroke="#4A8CB5" stroke-width="1.5" fill="none"/>
+                <path d="M10 14l3 3 5-6" stroke="#22C55E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <h3 class="pipe-title">Approval Gateway</h3>
+            <p class="pipe-desc">Shift officers and safety managers review each recommendation through a role-based approval flow. Every decision — approved or rejected — is logged into a hash-chained, tamper-evident audit ledger for regulatory compliance.</p>
+            <div class="pipe-tags">
+              <span class="pipe-tag">RBAC</span>
+              <span class="pipe-tag">Hash-Chained Audit</span>
+              <span class="pipe-tag">Tamper-Evident</span>
+            </div>
+            <div class="pipe-metric">
+              <span class="pipe-metric-val">100%</span>
+              <span class="pipe-metric-unit">decision traceability</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SECTION 3 — CUT ENGINE VISUALIZER
+       ═══════════════════════════════════════════════════════════ -->
+  <section class="s3" id="visualizer">
+    <div class="s3-inner">
+
+      <div class="s3-split">
+        <!-- Left: description -->
+        <div class="s3-text anim-target" data-anim="slide-left">
+          <span class="s2-label">CUT ENGINE</span>
+          <h2 class="s2-title s3-heading">The plant is a graph.<br/>Every accident is a path.<br/>We find the smallest cut.</h2>
+          <p class="s2-desc">CAUSALCUT models zones, machines, sensors, and workers as nodes in a safety hypergraph. Risk propagates along edges. The OR-Tools solver computes the mathematically minimal set of interventions that severs every high-risk pathway — without shutting down the entire line.</p>
+
+          <div class="s3-metrics">
+            <div class="s3-metric">
+              <div class="s3-metric-val" id="stat-paths">0</div>
+              <div class="s3-metric-label">Paths severed</div>
+            </div>
+            <div class="s3-metric">
+              <div class="s3-metric-val" id="stat-interventions">0</div>
+              <div class="s3-metric-label">Interventions</div>
+            </div>
+            <div class="s3-metric">
+              <div class="s3-metric-val" id="stat-cost">0<span class="s3-unit">%</span></div>
+              <div class="s3-metric-label">Cost reduction</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: graph -->
+        <div class="s3-graph-wrap anim-target" data-anim="slide-right">
+          <div class="s3-graph-card">
+            <div class="s3-graph-header">
+              <span class="s3-graph-label">SAFETY HYPERGRAPH — COKE OVEN BLOCK A</span>
+              <span class="s3-graph-status" id="graph-status">ANALYZING</span>
+            </div>
+            <svg class="viz-graph" id="viz-graph" viewBox="0 0 520 400" preserveAspectRatio="xMidYMid meet">
+              <g id="viz-edges"></g>
+              <g id="viz-cuts"></g>
+              <g id="viz-nodes"></g>
+              <g id="viz-labels"></g>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SECTION 4 — CTA FOOTER
+       ═══════════════════════════════════════════════════════════ -->
+  <footer class="s4" id="cta-footer">
+    <div class="s4-inner">
+      <div class="s4-left anim-target" data-anim="fade-up">
+        <h2 class="s4-title">Stop reacting to disasters.<br/>Start preventing them.</h2>
+        <p class="s4-desc">CAUSALCUT is deployed on-premise or in your private cloud. SOC 2 compliant. No data leaves your network.</p>
+        <div class="s4-buttons">
+          <button class="btn-cta btn-primary" id="btn-request-demo" onclick="window.top.location.href='/auth?tab=register'">
+            Request a Demo
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 12L12 2M12 2H5M12 2V9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="btn-cta btn-secondary" id="btn-read-docs">
+            Read the Docs
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 7H13M13 7L7 1M13 7L7 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="s4-right anim-target" data-anim="fade-up">
+        <div class="s4-stack-label">BUILT WITH</div>
+        <div class="s4-stack-tags">
+          <span>FastAPI</span><span>OR-Tools</span><span>NetworkX</span><span>SimPy</span><span>XGBoost</span><span>LightGBM</span><span>SQLite</span><span>React</span><span>Docker</span>
+        </div>
+        <div class="s4-stat-row">
+          <div class="s4-stat"><span class="s4-stat-num">219</span><span class="s4-stat-txt">passing tests</span></div>
+          <div class="s4-stat"><span class="s4-stat-num">20+</span><span class="s4-stat-txt">API endpoints</span></div>
+          <div class="s4-stat"><span class="s4-stat-num">4</span><span class="s4-stat-txt">ML models</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="s4-bottom">
+      <span>&copy; 2026 CAUSALCUT</span>
+      <span>ETH Hyderabad</span>
+      <span>Privacy</span>
+      <span>Terms</span>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
