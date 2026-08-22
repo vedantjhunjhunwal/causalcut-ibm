@@ -83,9 +83,76 @@ async def lifespan(app: FastAPI):
     app.state.handover_validator = handover_validator
 
     try:
+        from app.agents.agent_config import get_agent_settings
+        from app.agents.llm_client import LLMClient
+        from app.agents.message_bus import MessageBus
+        from app.agents.agent_memory import AgentMemory
+        from app.agents.supervisor_agent import SupervisorAgent
+        from app.agents.sentinel_agent import SentinelAgent
+        from app.agents.reasoning_agent import ReasoningAgent
+        from app.agents.planning_agent import PlanningAgent
+        from app.agents.chat_agent import ChatAgent
+
+        agent_settings = get_agent_settings()
+        llm_client = LLMClient(
+            provider=agent_settings.llm_provider,
+            model=agent_settings.llm_model,
+            api_key=agent_settings.llm_api_key,
+            temperature=agent_settings.llm_temperature,
+            max_tokens=agent_settings.llm_max_tokens,
+        )
+        message_bus = MessageBus(db=db)
+        agent_memory = AgentMemory(agent_name="system", db=db)
+
+        supervisor = SupervisorAgent(
+            name="supervisor", role="coordinator", tools=[],
+            llm_client=llm_client, memory=agent_memory, message_bus=message_bus,
+            risk_engine=risk_engine, db=db
+        )
+        
+        sentinel = SentinelAgent(
+            name="sentinel", role="monitor", tools=[],
+            llm_client=llm_client, memory=agent_memory, message_bus=message_bus,
+            risk_engine=risk_engine, db=db
+        )
+
+        reasoning = ReasoningAgent(
+            name="reasoning", role="analyst", tools=[],
+            llm_client=llm_client, memory=agent_memory, message_bus=message_bus,
+            risk_engine=risk_engine, db=db
+        )
+        
+        planning = PlanningAgent(
+            name="planning", role="planner", tools=[],
+            llm_client=llm_client, memory=agent_memory, message_bus=message_bus,
+            risk_engine=risk_engine, db=db
+        )
+
+        chat = ChatAgent(
+            name="chat", role="assistant",
+            tools=["get_zone_state", "get_risk_paths", "get_sensor_history", "get_recommendation"],
+            llm_client=llm_client, memory=agent_memory, message_bus=message_bus,
+            risk_engine=risk_engine, db=db, app_state=app.state
+        )
+
+        await supervisor.register_agent(sentinel)
+        await supervisor.register_agent(reasoning)
+        await supervisor.register_agent(planning)
+        await supervisor.register_agent(chat)
+
+        await supervisor.start_all()
+        app.state.supervisor = supervisor
+        log.info("Agent system initialized")
+    except Exception as e:
+        log.error(f"Failed to initialize agent system: {e}")
+        app.state.supervisor = None
+
+    try:
         yield
     finally:
         log.info("shutting down", extra={"queue_depth": queue.depth})
+        if getattr(app.state, "supervisor", None):
+            await app.state.supervisor.stop_all()
         await consumers.stop()   # drain in-flight before closing the db
         await db.close()
         set_db(None)

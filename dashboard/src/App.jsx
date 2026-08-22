@@ -14,6 +14,8 @@ import ApprovalsView from "./components/views/ApprovalsView";
 import ModelsView from "./components/views/ModelsView";
 import SettingsView from "./components/views/SettingsView";
 import { EMPTY_SCENARIO } from "./components/ScenarioBuilder";
+import AgentSituationBoard from "./components/AgentSituationBoard";
+import AgentChatPanel from "./components/AgentChatPanel";
 import "./App.css";
 
 export default function App() {
@@ -55,6 +57,18 @@ export default function App() {
     };
   }, []);
 
+  // Preload canonical scenario on mount so Run Simulation works immediately
+  useEffect(() => {
+    fetch(`${api.API || "http://localhost:8000/api/v1"}/scenario/sample/coke_oven_scenario`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && data.name) {
+          setScenario(data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => () => socketRef.current?.close(), []);
 
   const resetRunState = () => {
@@ -72,6 +86,21 @@ export default function App() {
     resetRunState();
     setPhase("running");
     setWsState("running");
+
+    // Fallback if empty
+    let payload = scn;
+    if (!payload?.name || !payload?.zones?.length) {
+      try {
+        const sampleRes = await fetch(`${api.API || "http://localhost:8000/api/v1"}/scenario/sample/coke_oven_scenario`);
+        const sampleData = await sampleRes.json();
+        if (sampleData && sampleData.name) {
+          payload = sampleData;
+          setScenario(sampleData);
+        }
+      } catch (e) {
+        console.warn("Could not load fallback scenario:", e);
+      }
+    }
 
     const stageKeys = [
       "validating",
@@ -103,7 +132,7 @@ export default function App() {
       const res = await fetch(`${api.API || "http://localhost:8000/api/v1"}/scenario/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(scn),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       clearInterval(stageInterval);
@@ -177,6 +206,8 @@ export default function App() {
             onSelectIntervention={(id) => setSelectedInterventionId(id)}
           />
         );
+      case "ai-situation":
+        return <AgentSituationBoard onNavigate={setActiveTab} />;
       case "plant-state":
         return <PlantStateView scenario={scenario} result={result} />;
       case "risk-paths":
@@ -263,6 +294,8 @@ export default function App() {
         <TopHeader facility={facility} isMonitoring={online !== false} />
         {renderActiveView()}
       </div>
+
+      <AgentChatPanel />
     </div>
   );
 }

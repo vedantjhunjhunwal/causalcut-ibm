@@ -89,6 +89,34 @@ export const api = {
   stats: () => fetch(`${API}/stats`).then(json).catch(() => null),
   modelStatus: () => fetch(`${API}/models/status`).then(json).catch(() => null),
   modelReadiness: () => fetch(`${API}/models/readiness`).then(json).catch(() => null),
+
+  // --- Agent API functions ---
+  agentStatus: async () => fetch(`${API}/agents/status`).then(json),
+  agentSituation: async () => fetch(`${API}/agents/situation`).then(json),
+  agentAlerts: async (limit = 20) => fetch(`${API}/agents/alerts?limit=${limit}`).then(json),
+  agentProposals: async () => fetch(`${API}/agents/proposals`).then(json),
+  agentProposalDetail: async (id) => fetch(`${API}/agents/proposals/${id}`).then(json),
+  decideProposal: async (id, decision, notes = '') =>
+    fetch(`${API}/agents/proposals/${id}/decide`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision, notes })
+    }).then(json),
+  agentChat: async (sessionId, message) =>
+    fetch(`${API}/agents/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, message })
+    }).then(json),
+  agentChatHistory: async (sessionId, limit = 50) =>
+    fetch(`${API}/agents/chat/history?session_id=${sessionId}&limit=${limit}`).then(json),
+  agentCompliance: async () => fetch(`${API}/agents/compliance`).then(json),
+  agentConfig: async (config) =>
+    fetch(`${API}/agents/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    }).then(json),
 };
 
 // ---------------------------------------------------------------------------
@@ -250,8 +278,7 @@ export class ProgressSocket {
           this.onError?.(err);
           return;
         }
-      }
-      if (data && data.status && data.status !== "running" && data.result) break;
+      }      if (data && data.status && data.status !== "running" && data.result) break;
       await sleep(SETTLE_DELAY_MS);
     }
 
@@ -278,4 +305,28 @@ export class ProgressSocket {
     }
     this.ws = null;
   }
+}
+
+export class AgentEventSocket {
+  constructor(onEvent) {
+    const wsBase = import.meta.env.VITE_WS_BASE || 'ws://localhost:8000';
+    this.ws = new WebSocket(`${wsBase}/api/v1/ws/agents/events`);
+    this.ws.onmessage = (e) => onEvent(JSON.parse(e.data));
+    this.ws.onerror = () => console.warn('Agent event WS error');
+  }
+  close() { this.ws?.close(); }
+}
+
+export class AgentChatSocket {
+  constructor(sessionId, onMessage, onToolUse) {
+    const wsBase = import.meta.env.VITE_WS_BASE || 'ws://localhost:8000';
+    this.ws = new WebSocket(`${wsBase}/api/v1/ws/agents/chat/${sessionId}`);
+    this.ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === 'tool_use') onToolUse?.(data);
+      else onMessage?.(data);
+    };
+  }
+  send(message) { this.ws?.send(JSON.stringify({ message })); }
+  close() { this.ws?.close(); }
 }

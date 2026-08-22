@@ -15,8 +15,10 @@
     "plotly.js": "^3.7.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-markdown": "^10.1.0",
     "react-plotly.js": "^4.0.0",
-    "reactflow": "^11.11.4"
+    "reactflow": "^11.11.4",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
