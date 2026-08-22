@@ -1,0 +1,501 @@
+{
+  "scenario_id": "scn-steelforge-factory-floor-001",
+  "name": "Steelforge Factory — Gas Leak Propagation (Nightshift)",
+  "description": "Chlorine gas leak detected in Gas Storage / Chemical Zone during nightshift. Degraded ventilation allows gas to propagate via the shared utility corridor toward the CNC Machining Floor. Workers on the CNC floor and in the corridor lack full PPE. A hot-work permit is active in the Hydraulic Press Bay. The PPE Checkpoint and Control Room are occupied. Mission: identify the minimum causal cut to isolate the hazard before it reaches the occupied machining floor.",
+  "factory_id": "00000000-0000-0000-0000-000000000003",
+  "safety_threshold": 0.15,
+
+  "zones": [
+    {
+      "zone_id": "zone-cnc",
+      "name": "CNC Machining Floor",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 150.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 0.9
+    },
+    {
+      "zone_id": "zone-hyd",
+      "name": "Hydraulic Press Bay",
+      "hazard_class": "high_risk",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-gas",
+      "name": "Gas Storage / Chemical Zone",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 50.0,
+      "ventilation_status": "degraded",
+      "ventilation_flow_ratio": 0.3
+    },
+    {
+      "zone_id": "zone-ppe",
+      "name": "PPE Checkpoint",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-ctrl",
+      "name": "Control Room",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-break",
+      "name": "Break Room",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 250.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-entry",
+      "name": "Main Entrance / Exit",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 250.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    }
+  ],
+
+  "zone_adjacency": [
+    {
+      "zone_a": "zone-cnc",
+      "zone_b": "zone-hyd",
+      "medium": "shared_wall"
+    },
+    {
+      "zone_a": "zone-cnc",
+      "zone_b": "zone-ppe",
+      "medium": "ventilation_duct"
+    },
+    {
+      "zone_a": "zone-gas",
+      "zone_b": "zone-ppe",
+      "medium": "ventilation_duct"
+    },
+    {
+      "zone_a": "zone-gas",
+      "zone_b": "zone-cnc",
+      "medium": "ventilation_duct"
+    },
+    {
+      "zone_a": "zone-hyd",
+      "zone_b": "zone-ctrl",
+      "medium": "shared_utility"
+    },
+    {
+      "zone_a": "zone-ppe",
+      "zone_b": "zone-ctrl",
+      "medium": "shared_wall"
+    },
+    {
+      "zone_a": "zone-ctrl",
+      "zone_b": "zone-break",
+      "medium": "shared_wall"
+    },
+    {
+      "zone_a": "zone-ctrl",
+      "zone_b": "zone-entry",
+      "medium": "shared_wall"
+    },
+    {
+      "zone_a": "zone-break",
+      "zone_b": "zone-entry",
+      "medium": "shared_wall"
+    }
+  ],
+
+  "assets": [
+    {
+      "asset_id": "CNC-01",
+      "zone_id": "zone-cnc",
+      "asset_type": "cnc_machine",
+      "condition": "nominal",
+      "failure_probability": 0.05
+    },
+    {
+      "asset_id": "CNC-02",
+      "zone_id": "zone-cnc",
+      "asset_type": "cnc_machine",
+      "condition": "nominal",
+      "failure_probability": 0.05
+    },
+    {
+      "asset_id": "CNC-03",
+      "zone_id": "zone-cnc",
+      "asset_type": "cnc_machine",
+      "condition": "degraded",
+      "failure_probability": 0.22
+    },
+    {
+      "asset_id": "BENCH-CNC-01",
+      "zone_id": "zone-cnc",
+      "asset_type": "workbench",
+      "condition": "nominal",
+      "failure_probability": 0.0
+    },
+    {
+      "asset_id": "PRESS-HYD-01",
+      "zone_id": "zone-hyd",
+      "asset_type": "hydraulic_press",
+      "condition": "nominal",
+      "failure_probability": 0.08
+    },
+    {
+      "asset_id": "TANK-GAS-01",
+      "zone_id": "zone-gas",
+      "asset_type": "gas_cylinder",
+      "condition": "degraded",
+      "failure_probability": 0.65
+    },
+    {
+      "asset_id": "TANK-GAS-02",
+      "zone_id": "zone-gas",
+      "asset_type": "gas_cylinder",
+      "condition": "nominal",
+      "failure_probability": 0.1
+    }
+  ],
+
+  "sensors": [
+    {
+      "sensor_id": "GS-CNC-A",
+      "zone_id": "zone-cnc",
+      "modality": "gas",
+      "unit": "ppm"
+    },
+    {
+      "sensor_id": "GS-CNC-B",
+      "zone_id": "zone-cnc",
+      "modality": "gas",
+      "unit": "ppm"
+    },
+    {
+      "sensor_id": "GS-HYD-A",
+      "zone_id": "zone-hyd",
+      "modality": "gas",
+      "unit": "ppm"
+    },
+    {
+      "sensor_id": "GS-HYD-B",
+      "zone_id": "zone-hyd",
+      "modality": "gas",
+      "unit": "ppm"
+    },
+    {
+      "sensor_id": "GS-GAS-A",
+      "zone_id": "zone-gas",
+      "modality": "gas",
+      "unit": "ppm"
+    },
+    {
+      "sensor_id": "GS-GAS-B",
+      "zone_id": "zone-gas",
+      "modality": "gas",
+      "unit": "ppm"
+    },
+    {
+      "sensor_id": "GS-PPE-A",
+      "zone_id": "zone-ppe",
+      "modality": "gas",
+      "unit": "ppm"
+    },
+    {
+      "sensor_id": "GS-PPE-B",
+      "zone_id": "zone-ppe",
+      "modality": "gas",
+      "unit": "ppm"
+    },
+    {
+      "sensor_id": "GS-CTRL-A",
+      "zone_id": "zone-ctrl",
+      "modality": "gas",
+      "unit": "ppm"
+    },
+    {
+      "sensor_id": "GS-ENTRY-A",
+      "zone_id": "zone-entry",
+      "modality": "gas",
+      "unit": "ppm"
+    },
+    {
+      "sensor_id": "VENT-GAS-01",
+      "zone_id": "zone-gas",
+      "modality": "airflow",
+      "unit": "ratio"
+    },
+    {
+      "sensor_id": "VENT-CNC-01",
+      "zone_id": "zone-cnc",
+      "modality": "airflow",
+      "unit": "ratio"
+    }
+  ],
+
+  "gas_readings": [
+    {
+      "sensor_id": "GS-GAS-A",
+      "zone_id": "zone-gas",
+      "gas_type": "chlorine",
+      "concentration_ppm": 62.0,
+      "severity": 0.88,
+      "confidence": 0.95,
+      "offset_seconds": 60
+    },
+    {
+      "sensor_id": "GS-GAS-B",
+      "zone_id": "zone-gas",
+      "gas_type": "chlorine",
+      "concentration_ppm": 58.5,
+      "severity": 0.84,
+      "confidence": 0.91,
+      "offset_seconds": 90
+    },
+    {
+      "sensor_id": "GS-PPE-A",
+      "zone_id": "zone-ppe",
+      "gas_type": "chlorine",
+      "concentration_ppm": 18.0,
+      "severity": 0.42,
+      "confidence": 0.78,
+      "offset_seconds": 180
+    },
+    {
+      "sensor_id": "GS-CNC-A",
+      "zone_id": "zone-cnc",
+      "gas_type": "chlorine",
+      "concentration_ppm": 8.5,
+      "severity": 0.22,
+      "confidence": 0.65,
+      "offset_seconds": 300
+    },
+    {
+      "sensor_id": "GS-CNC-B",
+      "zone_id": "zone-cnc",
+      "gas_type": "chlorine",
+      "concentration_ppm": 11.2,
+      "severity": 0.28,
+      "confidence": 0.70,
+      "offset_seconds": 360
+    },
+    {
+      "sensor_id": "GS-HYD-A",
+      "zone_id": "zone-hyd",
+      "gas_type": "chlorine",
+      "concentration_ppm": 2.1,
+      "severity": 0.05,
+      "confidence": 0.55,
+      "offset_seconds": 400
+    }
+  ],
+
+  "machine_readings": [
+    {
+      "asset_id": "CNC-01",
+      "zone_id": "zone-cnc",
+      "Type": "M",
+      "Air_temperature": 301.5,
+      "Process_temperature": 312.8,
+      "Rotational_speed": 1487.0,
+      "Torque": 43.2,
+      "Tool_wear": 112.0,
+      "offset_seconds": 30
+    },
+    {
+      "asset_id": "CNC-02",
+      "zone_id": "zone-cnc",
+      "Type": "M",
+      "Air_temperature": 300.1,
+      "Process_temperature": 311.0,
+      "Rotational_speed": 1512.0,
+      "Torque": 38.7,
+      "Tool_wear": 67.0,
+      "offset_seconds": 30
+    },
+    {
+      "asset_id": "CNC-03",
+      "zone_id": "zone-cnc",
+      "Type": "H",
+      "Air_temperature": 309.4,
+      "Process_temperature": 323.6,
+      "Rotational_speed": 1318.0,
+      "Torque": 62.4,
+      "Tool_wear": 218.0,
+      "offset_seconds": 30
+    },
+    {
+      "asset_id": "PRESS-HYD-01",
+      "zone_id": "zone-hyd",
+      "Type": "M",
+      "Air_temperature": 298.8,
+      "Process_temperature": 309.2,
+      "Rotational_speed": 1455.0,
+      "Torque": 55.1,
+      "Tool_wear": 88.0,
+      "offset_seconds": 45
+    }
+  ],
+
+  "hydraulic_readings": [
+    {
+      "zone_id": "zone-hyd",
+      "sensor_data": {
+        "PS1":  [153.0, 152.8, 151.9, 153.2, 152.5, 151.8, 153.0, 152.4, 152.7, 153.1],
+        "PS2":  [104.5, 104.1, 103.8, 104.6, 104.3, 103.9, 104.5, 104.2, 104.0, 104.4],
+        "PS3":  [130.2, 129.8, 130.5, 130.1, 129.9, 130.4, 130.0, 130.3, 130.1, 130.2],
+        "PS4":  [16.3,  16.1,  16.4,  16.2,  16.0,  16.3,  16.2,  16.4,  16.1,  16.3 ],
+        "PS5":  [110.5, 110.2, 110.8, 110.4, 110.1, 110.6, 110.3, 110.7, 110.2, 110.5],
+        "PS6":  [5.2,   5.1,   5.3,   5.2,   5.0,   5.2,   5.1,   5.3,   5.1,   5.2  ],
+        "EPS1": [2205.0,2198.0,2211.0,2203.0,2197.0,2208.0,2202.0,2206.0,2199.0,2204.0],
+        "FS1":  [8.52,  8.49,  8.55,  8.51,  8.48,  8.53,  8.50,  8.52,  8.49,  8.54 ],
+        "FS2":  [8.71,  8.68,  8.74,  8.70,  8.67,  8.72,  8.69,  8.71,  8.68,  8.73 ],
+        "TS1":  [35.2,  35.4,  35.1,  35.5,  35.3,  35.2,  35.4,  35.3,  35.1,  35.4 ],
+        "TS2":  [46.8,  46.6,  47.0,  46.9,  46.7,  46.8,  46.5,  46.9,  46.7,  46.8 ],
+        "TS3":  [47.5,  47.3,  47.7,  47.5,  47.2,  47.6,  47.4,  47.6,  47.3,  47.5 ],
+        "TS4":  [28.1,  28.0,  28.3,  28.2,  27.9,  28.1,  28.0,  28.2,  28.0,  28.1 ],
+        "VS1":  [0.52,  0.53,  0.51,  0.54,  0.52,  0.51,  0.53,  0.52,  0.51,  0.53 ],
+        "CE":   [0.87,  0.86,  0.88,  0.87,  0.86,  0.88,  0.87,  0.87,  0.86,  0.88 ],
+        "CP":   [0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00 ],
+        "SE":   [28.0,  27.8,  28.2,  28.0,  27.9,  28.1,  28.0,  28.1,  27.9,  28.0 ]
+      },
+      "offset_seconds": 50
+    }
+  ],
+
+  "workers": [
+    {
+      "worker_id": "W-CNC-01",
+      "zone_id": "zone-cnc",
+      "present": true,
+      "missing_ppe": ["gas_mask"]
+    },
+    {
+      "worker_id": "W-CNC-02",
+      "zone_id": "zone-cnc",
+      "present": true,
+      "missing_ppe": ["gas_mask", "safety_glasses"]
+    },
+    {
+      "worker_id": "W-CNC-03",
+      "zone_id": "zone-cnc",
+      "present": true,
+      "missing_ppe": []
+    },
+    {
+      "worker_id": "W-CNC-04",
+      "zone_id": "zone-cnc",
+      "present": true,
+      "missing_ppe": ["hard_hat"]
+    },
+    {
+      "worker_id": "W-HYD-01",
+      "zone_id": "zone-hyd",
+      "present": true,
+      "missing_ppe": []
+    },
+    {
+      "worker_id": "W-HYD-02",
+      "zone_id": "zone-hyd",
+      "present": true,
+      "missing_ppe": []
+    },
+    {
+      "worker_id": "W-HYD-03",
+      "zone_id": "zone-hyd",
+      "present": true,
+      "missing_ppe": ["gas_mask"]
+    },
+    {
+      "worker_id": "W-GAS-01",
+      "zone_id": "zone-gas",
+      "present": true,
+      "missing_ppe": ["gas_mask", "chemical_suit"]
+    },
+    {
+      "worker_id": "W-PPE-01",
+      "zone_id": "zone-ppe",
+      "present": true,
+      "missing_ppe": []
+    },
+    {
+      "worker_id": "W-CTRL-01",
+      "zone_id": "zone-ctrl",
+      "present": true,
+      "missing_ppe": []
+    },
+    {
+      "worker_id": "W-CTRL-02",
+      "zone_id": "zone-ctrl",
+      "present": true,
+      "missing_ppe": []
+    },
+    {
+      "worker_id": "W-CORRIDOR-01",
+      "zone_id": "zone-ppe",
+      "present": true,
+      "missing_ppe": ["gas_mask"]
+    },
+    {
+      "worker_id": "W-CORRIDOR-02",
+      "zone_id": "zone-cnc",
+      "present": true,
+      "missing_ppe": ["gas_mask"]
+    }
+  ],
+
+  "permits": [
+    {
+      "permit_id": "PTW-HYD-NS-001",
+      "zone_id": "zone-hyd",
+      "permit_type": "hot_work",
+      "status": "active",
+      "worker_id": "W-HYD-01"
+    },
+    {
+      "permit_id": "PTW-GAS-MNT-001",
+      "zone_id": "zone-gas",
+      "permit_type": "confined_space",
+      "status": "active",
+      "worker_id": "W-GAS-01"
+    }
+  ],
+
+  "events": [],
+
+  "metadata": {
+    "floor_plan": "steelforge_factory_floor_plan_v1.png",
+    "shift": "nightshift",
+    "author": "Antigravity",
+    "layout_zones": [
+      "CNC Machining Floor (top-left, green)",
+      "Hydraulic Press Bay (top-right, yellow)",
+      "Gas Storage / Chemical Zone (bottom-left, red)",
+      "PPE Checkpoint (bottom-center-left, green)",
+      "Control Room (bottom-center, green)",
+      "Break Room (right-middle, green)",
+      "Main Entrance / Exit (bottom-right, green)"
+    ],
+    "incident": "chlorine_gas_leak",
+    "leak_source": "TANK-GAS-01",
+    "propagation_path": [
+      "zone-gas",
+      "zone-ppe",
+      "zone-cnc"
+    ],
+    "expected_cut": [
+      "Evacuate W-GAS-01 immediately (no gas_mask / chemical_suit)",
+      "Suspend PTW-GAS-MNT-001 (confined space permit in active leak zone)",
+      "Seal ventilation duct zone-gas <-> zone-ppe",
+      "Evacuate W-CNC-01, W-CNC-02, W-CORRIDOR-01, W-CORRIDOR-02 (no gas_mask)",
+      "Suspend PTW-HYD-NS-001 if gas reaches zone-hyd",
+      "Restore ventilation in zone-gas before re-entry"
+    ]
+  }
+}

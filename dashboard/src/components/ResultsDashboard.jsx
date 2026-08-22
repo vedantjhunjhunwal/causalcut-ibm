@@ -166,7 +166,14 @@ export default function ResultsDashboard({ result, decision, onDecide, deciding 
       </div>
 
       {/* 5. 2D Factory Spatial Map */}
-      <FactoryMapView zoneRisk={result.zone_risk} graph={graph} />
+      <FactoryMapView 
+        zoneRisk={result.zone_risk} 
+        graph={graph}
+        causalPaths={result.paths || result.causal_paths}
+        interventions={rec?.interventions}
+        activatedRules={result.activated_rules || rec?.activated_rules}
+        scenario={result.scenario}
+      />
 
       {/* 6. Activated Compound Rules & Causal Paths (2 Columns) */}
       <div className="layout-2col" style={{ marginBottom: 0 }}>

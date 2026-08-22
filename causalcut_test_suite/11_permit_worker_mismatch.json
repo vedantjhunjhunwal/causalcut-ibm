@@ -2,7 +2,7 @@
   "scenario_id": "test-11_permit_worker_mismatch",
   "name": "Permit Worker Mismatch",
   "description": "CAUSALCUT behavioral test case: Permit Worker Mismatch.",
-  "factory_id": "northstar-alloys-plant-7",
+  "factory_id": "00000000-0000-0000-0000-000000000002",
   "safety_threshold": 0.12,
   "zones": [
     {

@@ -89,16 +89,19 @@ class SensorResult(BaseModel):
     y_norm: float = Field(ge=0.0, le=1.0)
 
 
-class BlueprintAnalyzeResponse(BaseModel):
+class BlueprintAnalysisOutput(BaseModel):
+    zones: list[ZoneResult]
+    zone_adjacency: list[AdjacencyResult]
+    sensors: list[SensorResult]
+    analysis_notes: str
+
+
+class BlueprintAnalyzeResponse(BlueprintAnalysisOutput):
     """
     Zones, adjacencies, and suggested sensors extracted from the blueprint.
     The `zones` and `zone_adjacency` arrays can be dropped directly into a
     Scenario payload. `sensors` can likewise be used as-is.
     """
-    zones: list[ZoneResult]
-    zone_adjacency: list[AdjacencyResult]
-    sensors: list[SensorResult]
-    analysis_notes: str
     model_used: str
 
 
@@ -181,11 +184,13 @@ def _call_gemini(image_b64: str, image_mime: str, prompt: str) -> dict[str, Any]
             detail="google-genai package not installed. Run: pip install google-genai",
         )
 
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    from app.core.config import get_settings
+    settings = get_settings()
+    api_key = settings.gemini_api_key or os.environ.get("GOOGLE_API_KEY")
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="GEMINI_API_KEY environment variable not set.",
+            detail="CAUSALCUT_GEMINI_API_KEY environment variable not set.",
         )
 
     client = genai.Client(api_key=api_key)
@@ -194,7 +199,7 @@ def _call_gemini(image_b64: str, image_mime: str, prompt: str) -> dict[str, Any]
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model="gemini-3.1-flash-lite",
             contents=[
                 gtypes.Content(parts=[
                     gtypes.Part(text=prompt),
@@ -206,6 +211,8 @@ def _call_gemini(image_b64: str, image_mime: str, prompt: str) -> dict[str, Any]
             config=gtypes.GenerateContentConfig(
                 temperature=0.1,
                 max_output_tokens=4096,
+                response_mime_type="application/json",
+                response_schema=BlueprintAnalysisOutput,
             ),
         )
     except Exception as exc:
@@ -364,5 +371,5 @@ async def analyze_blueprint(req: BlueprintAnalyzeRequest) -> BlueprintAnalyzeRes
         zone_adjacency=[AdjacencyResult(**a) for a in cleaned["zone_adjacency"]],
         sensors=[SensorResult(**s) for s in cleaned["sensors"]],
         analysis_notes=cleaned["analysis_notes"],
-        model_used="gemini-2.5-flash-lite",
+        model_used="gemini-3.1-flash-lite",
     )

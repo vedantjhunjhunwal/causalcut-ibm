@@ -2,7 +2,7 @@
   "scenario_id": "test-12_no_permits",
   "name": "No Permits",
   "description": "CAUSALCUT behavioral test case: No Permits.",
-  "factory_id": "northstar-alloys-plant-7",
+  "factory_id": "00000000-0000-0000-0000-000000000002",
   "safety_threshold": 0.12,
   "zones": [
     {

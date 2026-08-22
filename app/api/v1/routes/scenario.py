@@ -61,7 +61,7 @@ def _blank_template() -> dict[str, Any]:
         "scenario_id": "scn-example",
         "name": "New Scenario",
         "description": "",
-        "factory_id": "steelforge-001",
+        "factory_id": "00000000-0000-0000-0000-000000000001",
         "safety_threshold": 0.15,
         "zones": [
             {"zone_id": "zone-1", "name": "Zone 1", "hazard_class": "gas_hazard",
@@ -157,11 +157,28 @@ async def run(
         return {
             "error": "invalid_scenario",
             "errors": [{"field": ".".join(str(p) for p in e["loc"]), "message": e["msg"]}
-                       for e in exc.errors()],
+                       for e in exc.errors()]
         }
+
+    # --- Scrub invalid UUID factory_ids
+    import uuid
+    try:
+        uuid.UUID(str(scenario.factory_id))
+    except (ValueError, TypeError, AttributeError):
+        scenario.factory_id = str(uuid.uuid4())
 
     # --- 2/3. scenario_id (schema-generated) + correlation_id -----------
     cid = getattr(request.state, "correlation_id", None) or str(uuid.uuid4())
+    scenario.scenario_id = scenario.scenario_id or str(uuid.uuid4())
+
+    # --- Upsert factory to satisfy foreign key constraint ---
+    try:
+        request.app.state.db.client.table("factories").upsert({
+            "id": scenario.factory_id,
+            "name": scenario.name or "Dummy Factory"
+        }).execute()
+    except Exception:
+        pass
     run_id = f"run-{uuid.uuid4().hex[:10]}"
 
     from app.api.v1.routes.ws import broadcast_progress
@@ -261,7 +278,25 @@ async def start(
                 "errors": [{"field": ".".join(str(p) for p in e["loc"]),
                             "message": e["msg"]} for e in exc.errors()]}
 
+    # --- Scrub invalid UUID factory_ids
+    import uuid
+    try:
+        uuid.UUID(str(scenario.factory_id))
+    except (ValueError, TypeError, AttributeError):
+        scenario.factory_id = str(uuid.uuid4())
+
     cid = getattr(request.state, "correlation_id", None) or str(uuid.uuid4())
+    scenario.scenario_id = scenario.scenario_id or str(uuid.uuid4())
+
+    # --- Upsert factory to satisfy foreign key constraint ---
+    try:
+        request.app.state.db.client.table("factories").upsert({
+            "id": scenario.factory_id,
+            "name": scenario.name or "Dummy Factory"
+        }).execute()
+    except Exception:
+        pass
+
     run_id = f"run-{uuid.uuid4().hex[:10]}"
 
     _RUNS[run_id] = {"scenario": scenario.model_dump(mode="json"), "result": None,

@@ -1,6 +1,6 @@
 {
   "scenario": "coke_oven_flashfire",
-  "factory_id": "steelforge-001",
+  "factory_id": "00000000-0000-0000-0000-000000000001",
   "description": "Section 8 timeline: normal -> rising gas -> hot-work permit conflict -> PPE violation -> ventilation degradation -> HE-042 activation.",
   "steps": [
     {

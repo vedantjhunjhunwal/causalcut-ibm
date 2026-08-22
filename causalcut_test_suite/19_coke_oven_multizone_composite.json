@@ -2,7 +2,7 @@
   "scenario_id": "test-19_coke_oven_multizone_composite",
   "name": "Coke Oven Multi-Zone Composite Hazard",
   "description": "Multi-zone composite incident test with elevated methane release, high-stress compressor failure, degraded ventilation, active hot-work permit, and exposed workers in battery and gallery zones.",
-  "factory_id": "steelforge-001",
+  "factory_id": "00000000-0000-0000-0000-000000000001",
   "safety_threshold": 0.15,
   "zones": [
     {

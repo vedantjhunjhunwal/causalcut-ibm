@@ -13,6 +13,8 @@ import LiveEventsView from "./components/views/LiveEventsView";
 import ApprovalsView from "./components/views/ApprovalsView";
 import ModelsView from "./components/views/ModelsView";
 import SettingsView from "./components/views/SettingsView";
+import ChatDrawer from "./components/ChatDrawer";
+import { MessageSquare } from "lucide-react";
 import { EMPTY_SCENARIO } from "./components/ScenarioBuilder";
 import { useAuth } from "./context/AuthContext";
 import LoginPage from "./components/views/LoginPage";
@@ -30,7 +32,8 @@ export default function App() {
   const facility = session.factory?.name
     ? `${session.factory.name} — ${session.industryName}`
     : "Steel Plant — Coke Oven Facility";
-  const [selectedInterventionId, setSelectedInterventionId] = useState("INT-2047");
+  const [selectedInterventionId, setSelectedInterventionId] = useState(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [operator, setOperator] = useState({
     name: "N. Sharma",
     role: "SHIFT OFFICER · B",
@@ -38,7 +41,18 @@ export default function App() {
   });
 
   // Pipeline & Simulation State
-  const [scenario, setScenario] = useState({ ...EMPTY_SCENARIO });
+  const [scenario, setScenario] = useState(() => {
+    if (session?.factory?.floors?.length > 0) {
+      const floor = session.factory.floors[0];
+      return {
+        ...EMPTY_SCENARIO,
+        zones: floor.zones || [],
+        zone_adjacency: floor.zone_adjacency || [],
+        sensors: floor.sensors || [],
+      };
+    }
+    return { ...EMPTY_SCENARIO };
+  });
   const [phase, setPhase] = useState("idle"); // idle | running | done | error
   const [runId, setRunId] = useState(null);
   const [correlationId, setCorrelationId] = useState(null);
@@ -270,9 +284,44 @@ export default function App() {
 
       {/* Main Content Area */}
       <div className="main-wrapper">
-        <TopHeader facility={facility} isMonitoring={online !== false} />
+        <TopHeader facility={facility} isMonitoring={online !== false} onLogout={logout} />
         {renderActiveView()}
       </div>
+
+      {/* Floating AI Chat Button */}
+      <button 
+        className="floating-chat-btn"
+        onClick={() => setIsChatOpen(true)}
+        style={{
+          position: "fixed",
+          bottom: "24px",
+          right: "24px",
+          width: "56px",
+          height: "56px",
+          borderRadius: "50%",
+          backgroundColor: "#3b82f6",
+          color: "white",
+          border: "none",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 900,
+          transition: "transform 0.2s"
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.1)"}
+        onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
+      >
+        <MessageSquare size={24} />
+      </button>
+
+      {/* Agentic Chat Drawer */}
+      <ChatDrawer 
+        isOpen={isChatOpen} 
+        onClose={() => setIsChatOpen(false)} 
+        factoryId={facility?.id} 
+      />
     </div>
   );
 }

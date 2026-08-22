@@ -2,7 +2,7 @@
   "scenario_id": "scn-model-driven",
   "name": "Model-Driven Coke Oven (real gas inference)",
   "description": "Same coke-oven incident, but the gas reading supplies the RAW 128-dim UCI sensor array instead of a ppm value. The trained XGBoost + IsolationForest artifacts run real inference and their prediction becomes the canonical gas event.",
-  "factory_id": "steelforge-001",
+  "factory_id": "00000000-0000-0000-0000-000000000001",
   "safety_threshold": 0.15,
   "zones": [
     {

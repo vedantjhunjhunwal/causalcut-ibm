@@ -214,7 +214,7 @@ class Scenario(BaseModel):
     scenario_id: str = Field(default_factory=lambda: f"scn-{uuid.uuid4().hex[:8]}")
     name: str = Field(min_length=1, max_length=120)
     description: str = ""
-    factory_id: str = "steelforge-001"
+    factory_id: str = "00000000-0000-0000-0000-000000000001"
     safety_threshold: float = Field(default=0.15, ge=0.0, le=1.0)
 
     @field_validator("safety_threshold", mode="before")

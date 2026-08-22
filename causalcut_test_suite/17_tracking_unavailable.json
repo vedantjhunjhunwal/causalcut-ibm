@@ -2,7 +2,7 @@
   "scenario_id": "test-17_tracking_unavailable",
   "name": "Tracking Unavailable",
   "description": "CAUSALCUT behavioral test case: Tracking Unavailable.",
-  "factory_id": "northstar-alloys-plant-7",
+  "factory_id": "00000000-0000-0000-0000-000000000002",
   "safety_threshold": 0.12,
   "zones": [
     {

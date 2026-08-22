@@ -174,11 +174,9 @@ class GasInferencePipeline:
             raise ImportError("joblib and xgboost are required") from exc
 
         logger.info("Loading XGBoost artifact from %s", self.xgb_path)
-        try:
-            self._xgb_artifact = joblib.load(self.xgb_path)
-        except Exception as e:
-            logger.error(f"FATAL: Failed to load XGBoost artifact (corrupt pickle?): {e}")
-            self._xgb_artifact = {}
+        self._xgb_artifact = joblib.load(self.xgb_path)
+        if not isinstance(self._xgb_artifact, dict):
+            raise ValueError(f"Corrupt XGBoost artifact at {self.xgb_path}: expected dict, got {type(self._xgb_artifact)}")
 
         # Fail loudly if xgboost versions mismatch
         lib_vers = self._xgb_artifact.get("library_versions", {})
@@ -222,9 +220,11 @@ class GasInferencePipeline:
         if not booster_bytes:
             return None # Mock fallback if artifact didn't load properly
 
+        import numpy as np
         self._xgb_reconstructed = xgb.XGBClassifier()
         self._xgb_reconstructed.load_model(bytearray(booster_bytes))
-        self._xgb_reconstructed.classes_ = classes
+        self._xgb_reconstructed.classes_ = np.array(classes) if not isinstance(classes, np.ndarray) else classes
+        self._xgb_reconstructed.n_classes_ = len(classes)
         
         return self._xgb_reconstructed
 

@@ -2,7 +2,7 @@
   "scenario_id": "scn-boiler-methane-maintenance-002",
   "name": "Methane Boiler Feed Pump \u2014 Maintenance Shift",
   "description": "Multi-model integration test scenario with abnormal gas-array features, stressed rotating equipment, degraded utility pressure, an active electrical-maintenance permit, and worker tracking detections. Designed to exercise model inference, queue persistence, hypergraph construction, risk propagation, optimization, graph rendering, and audit flow.",
-  "factory_id": "northstar-alloys-plant-7",
+  "factory_id": "00000000-0000-0000-0000-000000000002",
   "safety_threshold": 0.12,
   "zones": [
     {

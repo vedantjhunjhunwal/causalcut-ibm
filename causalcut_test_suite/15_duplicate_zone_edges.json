@@ -2,7 +2,7 @@
   "scenario_id": "test-15_duplicate_zone_edges",
   "name": "Duplicate Zone Edges",
   "description": "CAUSALCUT behavioral test case: Duplicate Zone Edges.",
-  "factory_id": "northstar-alloys-plant-7",
+  "factory_id": "00000000-0000-0000-0000-000000000002",
   "safety_threshold": 0.12,
   "zones": [
     {

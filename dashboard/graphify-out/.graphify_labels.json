@@ -1,0 +1,16 @@
+{
+  "0": "devDependencies",
+  "1": "App.jsx",
+  "2": "api.js",
+  "3": "ResultsDashboard.jsx",
+  "4": "dependencies",
+  "5": "SimulationView.jsx",
+  "6": "ProgressSocket",
+  "7": "HypergraphView.jsx",
+  "8": "package.json",
+  "9": "BlueprintCanvas.jsx",
+  "10": "React + Vite",
+  "11": "vercel.json",
+  "12": "eslint.config.js",
+  "13": "vite.config.js"
+}

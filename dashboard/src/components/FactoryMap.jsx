@@ -1,223 +1,559 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useRef } from 'react';
+import './FactoryMap.css';
 
-// Maps the dataset's logical zones to our visual SVG zones
-const zoneMapping = {
-  "Gas Treatment": "zone-gas-storage",
-  "Coke Oven": "zone-cnc-machining",
-  "Battery 3": "zone-hydraulic-press",
-  "Quench Tower": "zone-ppe-checkpoint",
-  "Coal Handling": "zone-main-entrance",
-  "Control Room": "zone-control-room",
-  "Break Room": "zone-break-room",
+const SVG_WIDTH = 1000;
+const SVG_HEIGHT = 620;
+
+const COLORS = {
+  safe: 'rgba(16, 185, 129, 0.15)',
+  warning: 'rgba(245, 158, 11, 0.2)',
+  critical: 'rgba(239, 68, 68, 0.25)',
+  safeBorder: '#10b981',
+  warningBorder: '#f59e0b',
+  criticalBorder: '#ef4444',
+  text: '#ffffff',
+  bg: '#0f111a',
 };
 
-const visualZones = [
-  { id: "zone-control-room", name: "Control Room" },
-  { id: "zone-gas-storage", name: "Gas / Chem Storage" },
-  { id: "zone-cnc-machining", name: "CNC Machining Floor" },
-  { id: "zone-hydraulic-press", name: "Hydraulic Press Bay" },
-  { id: "zone-break-room", name: "Break Room" },
-  { id: "zone-ppe-checkpoint", name: "PPE Checkpoint" },
-  { id: "zone-main-entrance", name: "Main Entrance" },
+// Zone fill tints that match the uploaded floor-plan image
+// (green = standard/safe, yellow = high-risk, red = gas-hazard)
+const HAZARD_TINT = {
+  gas_hazard: 'rgba(239,68,68,0.18)',
+  high_risk:  'rgba(234,179,8,0.18)',
+  standard:   'rgba(16,185,129,0.10)',
+  propagation:'rgba(234,179,8,0.12)',
+};
+
+const getRiskColor = (riskScore) => {
+  if (riskScore == null) return { fill: 'rgba(255,255,255,0.04)', stroke: 'rgba(255,255,255,0.18)' };
+  if (riskScore < 0.3) return { fill: COLORS.safe, stroke: COLORS.safeBorder };
+  if (riskScore < 0.6) return { fill: COLORS.warning, stroke: COLORS.warningBorder };
+  return { fill: COLORS.critical, stroke: COLORS.criticalBorder };
+};
+
+// ---------------------------------------------------------------------------
+// Hardcoded floor-plan layout for the Steelforge factory image.
+// Coordinates are normalised [0-1] relative to SVG_WIDTH × SVG_HEIGHT.
+// Matches the spatial arrangement in the uploaded floor-plan exactly:
+//
+//   ┌─────────────────────────┬───────────────┐
+//   │   CNC Machining Floor   │ Hydraulic     │  ┌──────────┐
+//   │       (zone-cnc)        │ Press Bay     │  │  Break   │
+//   │                         │  (zone-hyd)   │  │  Room    │
+//   ├────────┬────────┬────────┴───────────────┤  ├──────────┤
+//   │ Gas    │  PPE   │    Control Room        │  │  Entry   │
+//   │Storage │ Check  │     (zone-ctrl)        │  │(zone-en) │
+//   └────────┴────────┴────────────────────────┘  └──────────┘
+//
+// ---------------------------------------------------------------------------
+const STEELFORGE_LAYOUT = {
+  'zone-cnc':   { x_norm: 0.01, y_norm: 0.02, w_norm: 0.44, h_norm: 0.44, color: 'rgba(22,163,74,0.18)',  stroke: '#22c55e' },
+  'zone-hyd':   { x_norm: 0.46, y_norm: 0.02, w_norm: 0.30, h_norm: 0.44, color: 'rgba(202,138,4,0.22)', stroke: '#eab308' },
+  'zone-gas':   { x_norm: 0.01, y_norm: 0.50, w_norm: 0.26, h_norm: 0.48, color: 'rgba(220,38,38,0.22)', stroke: '#ef4444' },
+  'zone-ppe':   { x_norm: 0.29, y_norm: 0.50, w_norm: 0.18, h_norm: 0.48, color: 'rgba(16,185,129,0.14)', stroke: '#10b981' },
+  'zone-ctrl':  { x_norm: 0.49, y_norm: 0.50, w_norm: 0.27, h_norm: 0.48, color: 'rgba(16,185,129,0.14)', stroke: '#10b981' },
+  'zone-break': { x_norm: 0.78, y_norm: 0.02, w_norm: 0.21, h_norm: 0.44, color: 'rgba(16,185,129,0.12)', stroke: '#10b981' },
+  'zone-entry': { x_norm: 0.78, y_norm: 0.50, w_norm: 0.21, h_norm: 0.48, color: 'rgba(16,185,129,0.12)', stroke: '#10b981' },
+};
+
+// Corridor connector segments (purely decorative, matching the image)
+const CORRIDORS = [
+  // Horizontal corridor between zones in the bottom row
+  { x: 0.27, y: 0.71, w: 0.02, h: 0.08 }, // gap between gas & ppe
+  { x: 0.47, y: 0.71, w: 0.02, h: 0.08 }, // gap between ppe & ctrl
+  { x: 0.76, y: 0.71, w: 0.02, h: 0.08 }, // gap between ctrl & entry
+  // Vertical connector between top and bottom rows
+  { x: 0.44, y: 0.44, w: 0.02, h: 0.06 }, // CNC -> corridor
+  { x: 0.60, y: 0.44, w: 0.02, h: 0.06 }, // Hyd -> ctrl
 ];
 
-export default function FactoryMap({ entities = [] }) {
-  const [hoveredZone, setHoveredZone] = useState(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+function getLayout(zoneId) {
+  return STEELFORGE_LAYOUT[zoneId] || null;
+}
 
-  // Aggregate signals per visual zone
-  const zoneStates = {};
-  const zoneEntities = {};
+export default function FactoryMap({
+  zones = [],
+  sensors = [],
+  workers = [],
+  assets = [],
+  permits = [],
+  riskLevels = {},
+  causalPaths = [],
+  interventions = [],
+  activatedRules = [],
+  currentFloor = 0,
+  floors = ['Ground'],
+  onFloorChange,
+  showCausalFocus = false,
+  entities = [],
+}) {
+  const [hoverInfo, setHoverInfo] = useState(null);
+  const containerRef = useRef(null);
 
-  visualZones.forEach((vz) => {
-    zoneStates[vz.id] = "LOW";
-    zoneEntities[vz.id] = [];
-  });
+  // -------------------------------------------------------------------------
+  // Zone layout: prefer hardcoded Steelforge coords, fall back to auto-grid
+  // -------------------------------------------------------------------------
+  const layoutedZones = useMemo(() => {
+    const out = [];
+    const unpositioned = [];
 
-  entities.forEach((ent) => {
-    const visualId = zoneMapping[ent.zone] || "zone-control-room"; // Fallback to safe zone if unknown
-    
-    if (!zoneEntities[visualId]) {
-       zoneEntities[visualId] = [];
-       zoneStates[visualId] = "LOW";
+    zones.forEach(z => {
+      // Graph nodes from the backend carry `id` but no `zone_id`.
+      // Scenario zones carry `zone_id`. Normalise once here so that all
+      // downstream code (zoneMap, riskLevels lookup, entity placement,
+      // zone rendering) consistently works via zone_id.
+      const zoneId = z.zone_id ?? z.id;
+      const normalised = { ...z, zone_id: zoneId };
+
+      const preset = getLayout(zoneId);
+      if (preset) {
+        out.push({
+          ...normalised,
+          x: preset.x_norm * SVG_WIDTH,
+          y: preset.y_norm * SVG_HEIGHT,
+          w: preset.w_norm * SVG_WIDTH,
+          h: preset.h_norm * SVG_HEIGHT,
+          _presetColor:  preset.color,
+          _presetStroke: preset.stroke,
+        });
+      } else if (z.x_norm != null && z.y_norm != null && z.w_norm != null && z.h_norm != null) {
+        out.push({
+          ...normalised,
+          x: z.x_norm * SVG_WIDTH,
+          y: z.y_norm * SVG_HEIGHT,
+          w: z.w_norm * SVG_WIDTH,
+          h: z.h_norm * SVG_HEIGHT,
+        });
+      } else {
+        unpositioned.push(normalised);
+      }
+    });
+
+    // Auto-grid for any zones not in the preset map
+    if (unpositioned.length > 0) {
+      const cols = Math.min(3, Math.ceil(Math.sqrt(unpositioned.length)));
+      const pad = 20;
+      const startX = 50;
+      const startY = 50;
+      const cellW = (SVG_WIDTH - startX * 2) / cols;
+      const cellH = (SVG_HEIGHT - startY * 2) / Math.ceil(unpositioned.length / cols);
+      unpositioned.forEach((z, i) => {
+        const c = i % cols;
+        const r = Math.floor(i / cols);
+        out.push({
+          ...z,
+          x: startX + c * cellW + pad,
+          y: startY + r * cellH + pad,
+          w: cellW - pad * 2,
+          h: cellH - pad * 2,
+        });
+      });
     }
-    
-    zoneEntities[visualId].push(ent);
 
-    // Escalating state logic
-    const currState = zoneStates[visualId];
-    if (ent.signal === "HIGH") {
-      zoneStates[visualId] = "HIGH";
-    } else if (ent.signal === "MEDIUM" && currState !== "HIGH") {
-      zoneStates[visualId] = "MEDIUM";
-    }
-  });
+    return out;
+  }, [zones]);
 
-  const getZoneClass = (id) => {
-    const signal = zoneStates[id];
-    if (signal === "HIGH") return "zone state-critical";
-    if (signal === "MEDIUM") return "zone state-elevated";
-    return "zone state-safe";
+  // Backward-compat: parse old `entities` prop
+  const processedSensors = sensors.length ? sensors : entities.filter(e => e.type === 'sensor' || e.sensor_id);
+  const processedWorkers = workers.length ? workers : entities.filter(e => e.type === 'worker' || e.worker_id);
+  const processedAssets  = assets.length  ? assets  : entities.filter(e => e.type === 'asset'  || e.asset_id);
+
+  const causalNodes = useMemo(() => {
+    if (!showCausalFocus) return new Set();
+    const nodes = new Set();
+    causalPaths.forEach(p => { nodes.add(p.source); nodes.add(p.target); });
+    return nodes;
+  }, [causalPaths, showCausalFocus]);
+
+  const zoneMap = useMemo(() => {
+    const map = new Map();
+    layoutedZones.forEach(z => map.set(z.zone_id, z));
+    return map;
+  }, [layoutedZones]);
+
+  // Entity coordinate placement inside their zone
+  const entityCoords = useMemo(() => {
+    const coords = new Map();
+
+    layoutedZones.forEach(z => {
+      coords.set(z.zone_id, { x: z.x + z.w / 2, y: z.y + z.h / 2 });
+
+      // Match by top-level zone/zone_id (scenario nodes) OR metadata.zone/zone_id (graph nodes)
+      const inZone = (e) =>
+        e.zone === z.zone_id || e.zone_id === z.zone_id ||
+        e.metadata?.zone === z.zone_id || e.metadata?.zone_id === z.zone_id;
+      const zSensors = processedSensors.filter(inZone);
+      const zWorkers = processedWorkers.filter(inZone);
+      const zAssets  = processedAssets.filter(inZone);
+      const zPermits = permits.filter(inZone);
+
+      let eIndex = 0;
+      const eTotal = zSensors.length + zWorkers.length + zAssets.length + zPermits.length;
+
+      const placeEntity = (id) => {
+        const cols = Math.max(2, Math.ceil(Math.sqrt(Math.max(4, eTotal))));
+        const col  = eIndex % cols;
+        const row  = Math.floor(eIndex / cols);
+        const cellW = (z.w - 50) / cols;
+        const cellH = (z.h - 50) / (Math.ceil(eTotal / cols) || 1);
+        const ex = z.x + 25 + col * cellW + cellW / 2;
+        const ey = z.y + 38 + row * cellH + cellH / 2;
+        coords.set(id, { x: ex, y: ey });
+        eIndex++;
+        return { x: ex, y: ey };
+      };
+
+      zSensors.forEach(s => s._pos = placeEntity(s.id || s.sensor_id));
+      zWorkers.forEach(w => w._pos = placeEntity(w.id || w.worker_id));
+      zAssets.forEach(a  => a._pos = placeEntity(a.id  || a.asset_id));
+      zPermits.forEach(p => p._pos = placeEntity(p.id  || p.permit_id));
+    });
+
+    activatedRules.forEach(r => {
+      const z = zoneMap.get(r.zone || r.zone_id);
+      if (z) coords.set(r.id, { x: z.x + z.w - 20, y: z.y + 20 });
+    });
+
+    interventions.forEach(int => {
+      const targetPos = coords.get(int.target || int.target_id);
+      if (targetPos) coords.set(int.id, { x: targetPos.x, y: targetPos.y + 30 });
+    });
+
+    return coords;
+  }, [layoutedZones, processedSensors, processedWorkers, processedAssets, permits,
+      activatedRules, interventions, zoneMap]);
+
+  const handleMouseMove = (e, info) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setHoverInfo({ ...info, x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
-
-  const handleMouseMove = (e, visualId) => {
-    setHoveredZone(visualId);
-    setMousePos({ x: e.clientX, y: e.clientY });
-  };
-
-  const handleMouseLeave = () => {
-    setHoveredZone(null);
-  };
+  const handleMouseLeave = () => setHoverInfo(null);
 
   return (
-    <div className="factory-map-container" style={{ position: "relative", width: "100%", maxWidth: "800px", margin: "0 auto 24px auto" }}>
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 800" width="100%" height="100%" style={{ background: "#0f111a", borderRadius: "16px", border: "1px solid #1e293b" }}>
-        <defs>
-          <pattern id="hatch-safe" width="12" height="12" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
-            <line x1="0" y1="0" x2="0" y2="12" className="gas-hatch" />
-          </pattern>
-        </defs>
+    <div className="factory-map-container" ref={containerRef}>
+      {/* Header */}
+      <div className="factory-map-header">
+        <h3 className="factory-map-title">Factory Floor Layout</h3>
+        <div className="factory-map-controls">
+          {floors && floors.length > 1 && (
+            <select className="floor-select" value={currentFloor}
+              onChange={e => onFloorChange && onFloorChange(e.target.value)}>
+              {floors.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+          )}
+          {typeof showCausalFocus !== 'undefined' && (
+            <button className={`map-control-btn ${showCausalFocus ? 'active' : ''}`}>
+              Causal Focus {showCausalFocus ? 'ON' : 'OFF'}
+            </button>
+          )}
+        </div>
+      </div>
 
-        {/* Background / Base Shell */}
-        <rect className="facility-shell" x="30" y="30" width="940" height="740" />
+      <div className="factory-map-svg-wrapper">
+        <svg viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} className="factory-svg">
+          <defs>
+            {/* Glow filters */}
+            <filter id="glow-red" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="4" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="glow-amber" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="3" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            {/* Arrow markers for causal paths */}
+            <marker id="arrow-critical" viewBox="0 0 10 10" refX="8" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444"/>
+            </marker>
+            <marker id="arrow-warning" viewBox="0 0 10 10" refX="8" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#f59e0b"/>
+            </marker>
+            <marker id="arrow-mitigated" viewBox="0 0 10 10" refX="8" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#06b6d4"/>
+            </marker>
+          </defs>
 
-        {/* ======================= */}
-        {/*        ZONES            */}
-        {/* ======================= */}
-        <g id="zones">
-          {/* 1. Control Room */}
-          <g id="zone-control-room" onMouseMove={(e) => handleMouseMove(e, "zone-control-room")} onMouseLeave={handleMouseLeave} style={{ cursor: "crosshair" }}>
-            <rect className={getZoneClass("zone-control-room")} x="70" y="70" width="250" height="140" />
-            <rect className="door" x="315" y="120" width="10" height="40" />
-            <text x="90" y="105" className="map-text-label">Control Room</text>
-            <text x="90" y="125" className="map-text-sub">MANAGER STATION</text>
-            <rect className="machine" x="90" y="145" width="120" height="40" rx="4" />
-          </g>
+          {/* ---- Corridor connectors (subtle) ---- */}
+          {CORRIDORS.map((c, i) => (
+            <rect key={`corridor-${i}`}
+              x={c.x * SVG_WIDTH} y={c.y * SVG_HEIGHT}
+              width={c.w * SVG_WIDTH} height={c.h * SVG_HEIGHT}
+              fill="rgba(100,116,139,0.15)" rx={2}/>
+          ))}
 
-          {/* 2. Gas & Chemical Storage */}
-          <g id="zone-gas-storage" onMouseMove={(e) => handleMouseMove(e, "zone-gas-storage")} onMouseLeave={handleMouseLeave} style={{ cursor: "crosshair" }}>
-            <rect className={getZoneClass("zone-gas-storage")} x="680" y="70" width="250" height="140" />
-            <rect x="680" y="70" width="250" height="140" fill="url(#hatch-safe)" rx="12" style={{ pointerEvents: "none" }} />
-            <rect className="door" x="675" y="120" width="10" height="40" />
-            <text x="700" y="105" className="map-text-label">Gas Treatment Facility</text>
-            <text x="700" y="125" className="map-text-sub">LEAK CLASSIFIER</text>
-            <circle cx="740" cy="165" r="20" className="machine" />
-            <circle cx="800" cy="165" r="20" className="machine" />
-            <circle cx="860" cy="165" r="20" className="machine" />
-          </g>
+          {/* ---- Zone adjacency lines (drawn before zones) ---- */}
+          {/* Drawn as subtle connecting lines between adjacent zone centres */}
 
-          {/* 3. CNC Machining Floor */}
-          <g id="zone-cnc-machining" onMouseMove={(e) => handleMouseMove(e, "zone-cnc-machining")} onMouseLeave={handleMouseLeave} style={{ cursor: "crosshair" }}>
-            <rect className={getZoneClass("zone-cnc-machining")} x="70" y="250" width="250" height="410" />
-            <rect className="door" x="315" y="300" width="10" height="50" />
-            <text x="90" y="285" className="map-text-label">Coke Oven Battery</text>
-            <text x="90" y="305" className="map-text-sub">ASSET CLASSIFIER</text>
-            <rect className="machine" x="100" y="340" width="60" height="80" />
-            <rect className="machine" x="100" y="450" width="60" height="80" />
-            <rect className="machine" x="100" y="560" width="60" height="80" />
-            <rect className="machine" x="220" y="340" width="60" height="80" />
-            <rect className="machine" x="220" y="500" width="60" height="80" />
-          </g>
+          {/* ---- Zones ---- */}
+          {layoutedZones.map(zone => {
+            const risk = riskLevels[zone.zone_id] ?? null;
+            const riskStyle = getRiskColor(risk);
 
-          {/* 4. Hydraulic Press Bay */}
-          <g id="zone-hydraulic-press" onMouseMove={(e) => handleMouseMove(e, "zone-hydraulic-press")} onMouseLeave={handleMouseLeave} style={{ cursor: "crosshair" }}>
-            <rect className={getZoneClass("zone-hydraulic-press")} x="680" y="250" width="250" height="230" />
-            <rect className="door" x="675" y="300" width="10" height="50" />
-            <text x="700" y="285" className="map-text-label">Blast Furnace</text>
-            <text x="700" y="305" className="map-text-sub">FAULT CLASSIFIER</text>
-            <rect className="machine" x="720" y="340" width="80" height="50" />
-            <rect className="machine" x="720" y="410" width="80" height="50" />
-          </g>
+            // Use preset color when no risk score yet; blend with risk color once available
+            const fillColor  = risk != null ? riskStyle.fill  : (zone._presetColor  || HAZARD_TINT[zone.hazard_class] || 'rgba(255,255,255,0.04)');
+            const strokeColor= risk != null ? riskStyle.stroke: (zone._presetStroke || 'rgba(255,255,255,0.2)');
+            const isCritical = risk != null && risk > 0.6;
 
-          {/* 5. Break Room */}
-          <g id="zone-break-room" onMouseMove={(e) => handleMouseMove(e, "zone-break-room")} onMouseLeave={handleMouseLeave} style={{ cursor: "crosshair" }}>
-            <rect className={getZoneClass("zone-break-room")} x="680" y="520" width="250" height="190" />
-            <rect className="door" x="675" y="610" width="10" height="40" />
-            <text x="700" y="555" className="map-text-label">Shared Utilities</text>
-            <text x="700" y="575" className="map-text-sub">LOW-RISK ZONE</text>
-            <rect className="machine" x="730" y="600" width="120" height="60" rx="30" />
-          </g>
+            const isFocused = !showCausalFocus || causalNodes.has(zone.zone_id);
+            const opacity = showCausalFocus && !isFocused ? 0.25 : 1;
 
-          {/* 6. PPE Checkpoint */}
-          <g id="zone-ppe-checkpoint" onMouseMove={(e) => handleMouseMove(e, "zone-ppe-checkpoint")} onMouseLeave={handleMouseLeave} style={{ cursor: "crosshair" }}>
-            <rect className={getZoneClass("zone-ppe-checkpoint")} x="320" y="520" width="360" height="80" />
-            <rect className="door" x="460" y="515" width="80" height="10" />
-            <rect className="door" x="460" y="595" width="80" height="10" />
-            <text x="500" y="545" className="map-text-label" textAnchor="middle">Quench Tower</text>
-            <text x="500" y="565" className="map-text-sub" textAnchor="middle">PPE & SAFETY CHECKPOINT</text>
-            <rect className="machine" x="360" y="575" width="80" height="15" />
-            <rect className="machine" x="560" y="575" width="80" height="15" />
-          </g>
+            return (
+              <g key={zone.zone_id}
+                className={`zone-group ${isCritical ? 'zone-critical' : ''}`}
+                style={{ opacity }}
+                onMouseMove={e => handleMouseMove(e, { type: 'zone', data: { ...zone, risk } })}
+                onMouseLeave={handleMouseLeave}>
+                {/* Zone background */}
+                <rect x={zone.x} y={zone.y} width={zone.w} height={zone.h} rx={10}
+                  fill={fillColor} stroke={strokeColor} strokeWidth={isCritical ? 2.5 : 1.5}
+                  className="zone-rect"
+                  filter={isCritical ? 'url(#glow-red)' : undefined}/>
+                {/* Hazard-class badge strip at top */}
+                <rect x={zone.x + 8} y={zone.y + 8} width={zone.w - 16} height={24} rx={5}
+                  fill="rgba(0,0,0,0.35)"/>
+                {/* Zone name */}
+                <text x={zone.x + zone.w / 2} y={zone.y + 24} className="zone-label"
+                  textAnchor="middle" fontSize={13} fontWeight="600" fill="#fff">
+                  {zone.name || zone.zone_id}
+                </text>
+              </g>
+            );
+          })}
 
-          {/* 7. Main Entrance */}
-          <g id="zone-main-entrance" onMouseMove={(e) => handleMouseMove(e, "zone-main-entrance")} onMouseLeave={handleMouseLeave} style={{ cursor: "crosshair" }}>
-            <rect className={getZoneClass("zone-main-entrance")} x="380" y="660" width="240" height="80" />
-            <rect className="door" x="460" y="735" width="80" height="10" />
-            <text x="500" y="700" className="map-text-label" textAnchor="middle">Coal Handling</text>
-            <text x="500" y="720" className="map-text-sub" textAnchor="middle">MAIN LOBBY / EXIT</text>
-          </g>
-        </g>
+          {/* ---- Causal paths ---- */}
+          {causalPaths.map((path, i) => {
+            const src = entityCoords.get(path.source);
+            const tgt = entityCoords.get(path.target);
+            if (!src || !tgt) return null;
+            const isMitigated = path.cut || path.relation === 'mitigates';
+            const mx = (src.x + tgt.x) / 2;
+            const my = (src.y + tgt.y) / 2 - 40;
+            return (
+              <g key={`path-${i}`}>
+                <path d={`M ${src.x} ${src.y} Q ${mx} ${my} ${tgt.x} ${tgt.y}`}
+                  className={`causal-path ${isMitigated ? 'mitigated' : 'critical'}`}
+                  markerEnd={isMitigated ? 'url(#arrow-mitigated)' : 'url(#arrow-critical)'}/>
+                {isMitigated && (
+                  <text x={mx} y={my} fontSize={14} fill="#06b6d4"
+                    textAnchor="middle" dominantBaseline="middle">✂️</text>
+                )}
+              </g>
+            );
+          })}
 
-        {/* ======================= */}
-        {/*   OCCUPANCY AVATARS     */}
-        {/* ======================= */}
-        <g id="occupancy-avatars" style={{ pointerEvents: "none" }}>
-          {/* CNC Floor */}
-          <rect className="avatar-body" x="180" y="370" width="14" height="24" rx="7" />
-          <rect className="avatar-body" x="180" y="480" width="14" height="24" rx="7" />
-          
-          {/* Hydraulic Press */}
-          <rect className="avatar-body" x="820" y="350" width="14" height="24" rx="7" />
-          <rect className="avatar-body" x="820" y="420" width="14" height="24" rx="7" />
-          
-          {/* Control Room */}
-          <rect className="avatar-body" x="130" y="130" width="14" height="24" rx="7" />
-          <rect className="avatar-body" x="170" y="130" width="14" height="24" rx="7" />
-          
-          {/* Break Room */}
-          <rect className="avatar-body" x="710" y="618" width="14" height="24" rx="7" />
-          <rect className="avatar-body" x="760" y="570" width="14" height="24" rx="7" />
-        </g>
+          {/* ---- Sensors ---- */}
+          {processedSensors.map(s => {
+            if (!s._pos) return null;
+            if (showCausalFocus && !causalNodes.has(s.id || s.sensor_id)) return null;
+            return (
+              <g key={s.id || s.sensor_id}
+                transform={`translate(${s._pos.x}, ${s._pos.y})`}
+                className="entity-icon"
+                onMouseMove={e => handleMouseMove(e, { type: 'sensor', data: s })}
+                onMouseLeave={handleMouseLeave}>
+                <circle r={13} fill="#0f172a" stroke="#3b82f6" strokeWidth={1.5}/>
+                <text x={0} y={5} fontSize={12} textAnchor="middle">⛽</text>
+                <text x={0} y={23} className="entity-text" textAnchor="middle" fontSize={9}>
+                  {(s.id || s.sensor_id || '').replace('GS-','').replace('VENT-','')}
+                </text>
+              </g>
+            );
+          })}
 
-        {/* ======================= */}
-        {/*     SENSOR NODES        */}
-        {/* ======================= */}
-        <g id="sensor-nodes" style={{ pointerEvents: "none" }}>
-          <g transform="translate(130, 320)"><circle className="sensor-ring" r="10" /><circle className="sensor-core" r="4" /></g>
-          <g transform="translate(250, 320)"><circle className="sensor-ring" r="10" /><circle className="sensor-core" r="4" /></g>
-          <g transform="translate(760, 325)"><circle className="sensor-ring" r="10" /><circle className="sensor-core" r="4" /></g>
-          <g transform="translate(740, 150)"><circle className="sensor-ring" r="10" /><circle className="sensor-core" r="4" /></g>
-          <g transform="translate(800, 150)"><circle className="sensor-ring" r="10" /><circle className="sensor-core" r="4" /></g>
-        </g>
-      </svg>
+          {/* ---- Workers ---- */}
+          {processedWorkers.map(w => {
+            if (!w._pos) return null;
+            if (showCausalFocus && !causalNodes.has(w.id || w.worker_id)) return null;
+            const hasPPE = w.metadata?.ppe_compliant ?? w.ppe_compliant ?? (!(w.missing_ppe?.length));
+            return (
+              <g key={w.id || w.worker_id}
+                transform={`translate(${w._pos.x}, ${w._pos.y})`}
+                className="entity-icon"
+                onMouseMove={e => handleMouseMove(e, { type: 'worker', data: w })}
+                onMouseLeave={handleMouseLeave}>
+                <circle r={13} fill="#0f172a" stroke="#8b5cf6" strokeWidth={1.5}/>
+                <text x={0} y={5} fontSize={12} textAnchor="middle">👷</text>
+                {/* PPE status dot */}
+                <circle cx={10} cy={-9} r={4}
+                  fill={hasPPE ? '#10b981' : '#ef4444'}
+                  stroke="#0f172a" strokeWidth={1}/>
+                <text x={0} y={23} className="entity-text" textAnchor="middle" fontSize={9}>
+                  {(w.id || w.worker_id || '').split('-').slice(-1)[0]}
+                </text>
+              </g>
+            );
+          })}
 
-      {/* Hover Tooltip Overlay */}
-      {hoveredZone && (
-        <div
-          className="map-tooltip"
-          style={{
-            left: mousePos.x + 15,
-            top: mousePos.y + 15,
-          }}
-        >
-          <div className="tooltip-title">{visualZones.find(z => z.id === hoveredZone)?.name}</div>
-          <div className="tooltip-body">
-            {zoneEntities[hoveredZone] && zoneEntities[hoveredZone].length > 0 ? (
-              <ul className="tooltip-list">
-                {zoneEntities[hoveredZone].map((ent, idx) => (
-                  <li key={idx} className="tooltip-item">
-                    <span className={`badge-pill ${ent.signal.toLowerCase()} tooltip-badge`}>●</span>
-                    <div className="tooltip-ent-text">
-                      <div className="ent-name">{ent.entity}</div>
-                      <div className="ent-state">{ent.state}</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="tooltip-empty">No active sensors or operations reported.</div>
-            )}
-          </div>
+          {/* ---- Assets ---- */}
+          {processedAssets.map(a => {
+            if (!a._pos) return null;
+            if (showCausalFocus && !causalNodes.has(a.id || a.asset_id)) return null;
+            const isFailing = (a.failure_probability || a.metadata?.failure_prob || 0) > 0.5;
+            return (
+              <g key={a.id || a.asset_id}
+                transform={`translate(${a._pos.x}, ${a._pos.y})`}
+                className="entity-icon"
+                onMouseMove={e => handleMouseMove(e, { type: 'asset', data: a })}
+                onMouseLeave={handleMouseLeave}>
+                <rect x={-13} y={-13} width={26} height={26} rx={4}
+                  fill="#0f172a" stroke={isFailing ? '#ef4444' : '#ec4899'} strokeWidth={1.5}/>
+                <text x={0} y={5} fontSize={12} textAnchor="middle">⚙️</text>
+                <text x={0} y={23} className="entity-text" textAnchor="middle" fontSize={9}>
+                  {(a.id || a.asset_id || '').split('-')[0]}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* ---- Permits ---- */}
+          {permits.map(p => {
+            if (!p._pos) return null;
+            if (showCausalFocus && !causalNodes.has(p.id || p.permit_id)) return null;
+            return (
+              <g key={p.id || p.permit_id}
+                transform={`translate(${p._pos.x}, ${p._pos.y})`}
+                className="entity-icon"
+                onMouseMove={e => handleMouseMove(e, { type: 'permit', data: p })}
+                onMouseLeave={handleMouseLeave}>
+                <rect x={-12} y={-14} width={24} height={28} rx={2}
+                  fill="#0f172a" stroke="#eab308" strokeWidth={1.5}/>
+                <text x={0} y={4} fontSize={12} textAnchor="middle">📜</text>
+                <text x={0} y={23} className="entity-text" textAnchor="middle" fontSize={9}>PTW</text>
+              </g>
+            );
+          })}
+
+          {/* ---- Activated rules (warning triangles) ---- */}
+          {activatedRules.map(r => {
+            const pos = entityCoords.get(r.id);
+            if (!pos) return null;
+            return (
+              <g key={r.id} transform={`translate(${pos.x}, ${pos.y})`}
+                className="entity-icon"
+                onMouseMove={e => handleMouseMove(e, { type: 'rule', data: r })}
+                onMouseLeave={handleMouseLeave}>
+                <path d="M 0 -13 L 15 12 L -15 12 z" fill="#ef4444" stroke="#7f1d1d" strokeWidth={1}/>
+                <text x={0} y={8} fontSize={11} textAnchor="middle" fill="#fff" fontWeight="bold">!</text>
+              </g>
+            );
+          })}
+
+          {/* ---- Interventions ---- */}
+          {interventions.map(int => {
+            const pos = entityCoords.get(int.id);
+            if (!pos) return null;
+            return (
+              <g key={int.id} transform={`translate(${pos.x}, ${pos.y})`}
+                className="entity-icon"
+                onMouseMove={e => handleMouseMove(e, { type: 'intervention', data: int })}
+                onMouseLeave={handleMouseLeave}>
+                <rect x={-20} y={-10} width={40} height={20} rx={10}
+                  fill="#ef4444" stroke="#fff" strokeWidth={1}/>
+                <text x={0} y={4} fontSize={10} textAnchor="middle" fill="#fff">🛑</text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* Legend */}
+      <div className="map-legend">
+        <div className="legend-item">
+          <div className="legend-color" style={{ background: COLORS.safeBorder }}/>
+          <span>Safe (&lt;0.3)</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-color" style={{ background: COLORS.warningBorder }}/>
+          <span>Warning (0.3-0.6)</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-color" style={{ background: COLORS.criticalBorder }}/>
+          <span>Critical (&gt;0.6)</span>
+        </div>
+        <div className="legend-item"><span style={{marginRight:'4px'}}>⛽</span> Sensor</div>
+        <div className="legend-item"><span style={{marginRight:'4px'}}>👷</span> Worker</div>
+        <div className="legend-item"><span style={{marginRight:'4px'}}>⚙️</span> Asset</div>
+        <div className="legend-item"><span style={{marginRight:'4px'}}>📜</span> Permit</div>
+      </div>
+
+      {/* Tooltip */}
+      {hoverInfo && (
+        <div className="map-tooltip" style={{ left: hoverInfo.x, top: hoverInfo.y }}>
+          {hoverInfo.type === 'zone' && (
+            <>
+              <h4>{hoverInfo.data.name || hoverInfo.data.zone_id}</h4>
+              <p><span className="label">Risk Score:</span>
+                 <span className="value">{hoverInfo.data.risk != null ? hoverInfo.data.risk.toFixed(2) : '—'}</span></p>
+              {hoverInfo.data.hazard_class &&
+                <p><span className="label">Hazard:</span>
+                   <span className="value" style={{textTransform:'capitalize'}}>{hoverInfo.data.hazard_class}</span></p>}
+              {hoverInfo.data.ventilation_status &&
+                <p><span className="label">Ventilation:</span>
+                   <span className="value">{hoverInfo.data.ventilation_status}</span></p>}
+            </>
+          )}
+          {hoverInfo.type === 'sensor' && (
+            <>
+              <h4>{hoverInfo.data.label || hoverInfo.data.sensor_id || hoverInfo.data.id}</h4>
+              {hoverInfo.data.metadata?.value !== undefined &&
+                <p><span className="label">Reading:</span>
+                   <span className="value">{hoverInfo.data.metadata.value} {hoverInfo.data.metadata.unit}</span></p>}
+              {hoverInfo.data.status &&
+                <p><span className="label">Status:</span>
+                   <span className="value">{hoverInfo.data.status}</span></p>}
+            </>
+          )}
+          {hoverInfo.type === 'worker' && (
+            <>
+              <h4>{hoverInfo.data.label || hoverInfo.data.worker_id || hoverInfo.data.id}</h4>
+              <p><span className="label">PPE:</span>
+                 <span className="value">
+                   {(hoverInfo.data.metadata?.ppe_compliant ?? hoverInfo.data.ppe_compliant ?? !(hoverInfo.data.missing_ppe?.length))
+                     ? '✅ Compliant' : '❌ Missing'}
+                 </span></p>
+              {hoverInfo.data.missing_ppe?.length > 0 &&
+                <p><span className="label">Missing:</span>
+                   <span className="value">{hoverInfo.data.missing_ppe.join(', ')}</span></p>}
+            </>
+          )}
+          {hoverInfo.type === 'asset' && (
+            <>
+              <h4>{hoverInfo.data.label || hoverInfo.data.asset_id || hoverInfo.data.id}</h4>
+              {hoverInfo.data.failure_probability != null &&
+                <p><span className="label">Fail Prob:</span>
+                   <span className="value">{(hoverInfo.data.failure_probability * 100).toFixed(1)}%</span></p>}
+              {hoverInfo.data.condition &&
+                <p><span className="label">Condition:</span>
+                   <span className="value">{hoverInfo.data.condition}</span></p>}
+            </>
+          )}
+          {hoverInfo.type === 'permit' && (
+            <>
+              <h4>{hoverInfo.data.label || hoverInfo.data.permit_id || hoverInfo.data.id}</h4>
+              {hoverInfo.data.status &&
+                <p><span className="label">Status:</span>
+                   <span className="value">{hoverInfo.data.status}</span></p>}
+              {hoverInfo.data.permit_type &&
+                <p><span className="label">Type:</span>
+                   <span className="value">{hoverInfo.data.permit_type}</span></p>}
+            </>
+          )}
+          {hoverInfo.type === 'rule' && (
+            <>
+              <h4>Rule Triggered</h4>
+              <p><span className="value">{hoverInfo.data.label || hoverInfo.data.id}</span></p>
+            </>
+          )}
+          {hoverInfo.type === 'intervention' && (
+            <>
+              <h4>Recommended Action</h4>
+              <p><span className="value">{hoverInfo.data.label || hoverInfo.data.id}</span></p>
+            </>
+          )}
         </div>
       )}
     </div>

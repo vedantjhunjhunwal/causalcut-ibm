@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: causalcut-api
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: CAUSALCUT_ENVIRONMENT
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CAUSALCUT_GEMINI_API_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.0

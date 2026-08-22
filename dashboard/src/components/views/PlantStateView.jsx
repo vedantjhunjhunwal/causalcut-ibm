@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { RefreshCw, Filter, ShieldCheck, Users, Cpu, FileText } from "lucide-react";
 import { api } from "../../api";
-import FactoryMap from "../FactoryMap";
+import FactoryMapView from "../FactoryMapView";
 
 export default function PlantStateView({ scenario, result }) {
   const [activeZone, setActiveZone] = useState("ALL");
@@ -152,7 +152,14 @@ export default function PlantStateView({ scenario, result }) {
       </div>
 
       {/* Interactive Map Layout */}
-      <FactoryMap entities={filteredRows} />
+      <FactoryMapView
+        zoneRisk={result?.zone_risk}
+        graph={result?.graph || { nodes: [], edges: [] }}
+        causalPaths={result?.paths || result?.causal_paths}
+        interventions={result?.recommendation?.interventions}
+        activatedRules={result?.activated_rules || result?.recommendation?.activated_rules}
+        scenario={scenario}
+      />
 
       {/* Structured State Register Table Panel */}
       <div className="panel-box" style={{ marginBottom: 22 }}>

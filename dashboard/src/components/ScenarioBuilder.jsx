@@ -185,7 +185,7 @@ function blankEntity(cfg) {
 export const EMPTY_SCENARIO = {
   name: "",
   description: "",
-  factory_id: "steelforge-001",
+  factory_id: "00000000-0000-0000-0000-000000000001",
   safety_threshold: 0.15,
   zones: [],
   zone_adjacency: [],
@@ -560,7 +560,7 @@ export default function ScenarioBuilder({ scenario, setScenario, onRun, busy }) 
             </label>
             <input
               style={{ width: "100%", padding: "7px 10px", fontSize: 13, borderRadius: 4, border: "1px solid #cbd5e1" }}
-              value={scenario.factory_id || "steelforge-001"}
+              value={scenario.factory_id || "00000000-0000-0000-0000-000000000001"}
               onChange={(e) => update({ factory_id: e.target.value })}
             />
           </div>

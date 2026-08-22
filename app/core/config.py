@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     # --- Scenario pipeline ---------------------------------------------
     # How long /scenario/run waits for its events to traverse the queue and be
     # projected into SQLite before analysis begins.
-    scenario_pipeline_timeout_s: float = 30.0
+    scenario_pipeline_timeout_s: float = 120.0  # 2-min ceiling; Supabase I/O can be slow
 
     # --- Model inference layer -----------------------------------------
     # Execution mode for the model services. "auto" = real where artifacts +
@@ -100,7 +100,12 @@ class Settings(BaseSettings):
 
     # --- Security -------------------------------------------------------
     api_key: str | None = None  # if set, required on write endpoints
+    gemini_api_key: str | None = None
     docs_enabled: bool = True
+
+    # --- Supabase -------------------------------------------------------
+    supabase_url: str | None = None
+    supabase_service_role_key: str | None = None
 
 
 @lru_cache(maxsize=1)

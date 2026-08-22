@@ -228,18 +228,52 @@ class ConsumerPool:
     async def _handle(self, name: str, item: QueuedEvent) -> None:
         e = item.event
         token = correlation_id_ctx.set(e.correlation_id)
+        # Track whether the session subscriber should fire in the finally block.
+        # It must NOT fire on a retry (the event will be re-queued and processed
+        # again), but MUST fire on success or permanent failure (dead-letter) so
+        # that session.wait() gets an accurate seen-count.
+        _notify_session = True
         try:
-            await self.projector.apply(e)
-            await self.events.mark_processed(e.event_id)
-            self.queue.counters.processed += 1
-            log.debug(
-                "event projected",
-                extra={"event_id": str(e.event_id), "event_type": str(e.event_type),
-                       "consumer": name},
-            )
-            # Analytical subscriber runs after the durable projection. Isolated:
-            # its failure must not dead-letter or retry a correctly-projected
-            # event, so we catch and log rather than propagate.
+            try:
+                await self.projector.apply(e)
+                await self.events.mark_processed(e.event_id)
+                self.queue.counters.processed += 1
+                log.debug(
+                    "event projected",
+                    extra={"event_id": str(e.event_id), "event_type": str(e.event_type),
+                           "consumer": name},
+                )
+            except Exception as exc:
+                self.queue.counters.failed += 1
+                if item.attempt < self.max_retries:
+                    self.queue.counters.retried += 1
+                    await asyncio.sleep(0.1 * 2 ** item.attempt)  # backoff
+                    await self.queue.put(e, attempt=item.attempt + 1)
+                    log.warning(
+                        "projection failed; retrying",
+                        extra={"event_id": str(e.event_id), "attempt": item.attempt,
+                               "error": str(exc)},
+                    )
+                    # Do NOT notify the session — the retry will do it.
+                    _notify_session = False
+                    return
+                else:
+                    await self.dlq.record(e, name, item.attempt, exc)
+                    self.queue.counters.dead_lettered += 1
+                    log.error(
+                        "projection failed; dead-lettered",
+                        extra={"event_id": str(e.event_id), "attempts": item.attempt,
+                               "error": str(exc)},
+                    )
+                    # Fall through to finally: session IS notified so
+                    # pipeline.wait() can detect the failure immediately rather
+                    # than blocking for the full timeout ceiling.
+                    raise  # re-raise so outer except catches and we hit finally
+
+            # --- Analytical subscribers (after successful projection only) ---
+
+            # Risk-engine subscriber: isolated — its failure must not dead-letter
+            # a correctly-projected event.
             if self.risk_engine is not None:
                 try:
                     self.risk_engine.apply_canonical(e)
@@ -249,35 +283,19 @@ class ConsumerPool:
                         extra={"event_id": str(e.event_id)},
                     )
 
-            # Scenario-scoped subscriber: a /scenario/run call registers a
-            # session keyed by correlation_id, so its events land in that
-            # scenario's own hypergraph AFTER durable SQLite projection.
-            # Same isolation rule — never fails the projection.
-            session = get_session_registry().get(e.correlation_id)
-            if session is not None:
-                try:
-                    session.apply(e)
-                except Exception:  # pragma: no cover - defensive
-                    log.exception("scenario session failed on event",
-                                  extra={"event_id": str(e.event_id)})
-        except Exception as exc:
-            self.queue.counters.failed += 1
-            if item.attempt < self.max_retries:
-                self.queue.counters.retried += 1
-                await asyncio.sleep(0.1 * 2 ** item.attempt)  # backoff
-                await self.queue.put(e, attempt=item.attempt + 1)
-                log.warning(
-                    "projection failed; retrying",
-                    extra={"event_id": str(e.event_id), "attempt": item.attempt,
-                           "error": str(exc)},
-                )
-            else:
-                await self.dlq.record(e, name, item.attempt, exc)
-                self.queue.counters.dead_lettered += 1
-                log.error(
-                    "projection failed; dead-lettered",
-                    extra={"event_id": str(e.event_id), "attempts": item.attempt,
-                           "error": str(exc)},
-                )
+        except Exception:
+            pass  # projection path already logged; fall through to finally
+
         finally:
+            # Scenario-scoped subscriber: notified on every terminal attempt
+            # (success or dead-letter) so session.wait() gets an accurate count.
+            if _notify_session:
+                session = get_session_registry().get(e.correlation_id)
+                if session is not None:
+                    try:
+                        session.apply(e)
+                    except Exception:  # pragma: no cover - defensive
+                        log.exception("scenario session failed on event",
+                                      extra={"event_id": str(e.event_id)})
             correlation_id_ctx.reset(token)
+

@@ -1,0 +1,1 @@
+{"nodes": [{"id": "vedant_incompleteness_report_functional_assessment", "label": "Functional Incompleteness Assessment", "file_type": "document", "source_file": "vedant/incompleteness_report.md", "rationale": "Identifies missing components like ADWIN drift detection and OSHA risk priors."}], "edges": [], "hyperedges": []}

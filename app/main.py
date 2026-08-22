@@ -7,6 +7,18 @@ go later if it ever needs to — and not before.
 
 from __future__ import annotations
 
+import asyncio
+import sys
+
+# ---------------------------------------------------------------------- #
+# Windows-specific: the default ProactorEventLoop on Windows conflicts with
+# httpx's socket handling (supabase-py → httpx → WinError 10035).
+# Forcing WindowsSelectorEventLoopPolicy fixes WSAEWOULDBLOCK before the
+# app even boots. This guard is a no-op on Linux / macOS.
+# ---------------------------------------------------------------------- #
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -44,11 +56,7 @@ async def lifespan(app: FastAPI):
                "factory_id": settings.factory_id},
     )
 
-    db = await Database(
-        path=settings.db_path,
-        busy_timeout_ms=settings.sqlite_busy_timeout_ms,
-        synchronous=settings.sqlite_synchronous,
-    ).connect()
+    db = await Database().connect()
     set_db(db)
 
     queue = EventQueue(

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Bell, RefreshCw } from "lucide-react";
+import { Bell, LogOut } from "lucide-react";
 
-export default function TopHeader({ facility = "Steel Plant — Coke Oven Facility", isMonitoring = true }) {
+export default function TopHeader({ facility = "Steel Plant — Coke Oven Facility", isMonitoring = true, onLogout }) {
   const [currentTime, setCurrentTime] = useState("");
 
   useEffect(() => {
@@ -42,6 +42,11 @@ export default function TopHeader({ facility = "Steel Plant — Coke Oven Facili
         <button className="icon-button" title="Notifications">
           <Bell size={16} />
         </button>
+        {onLogout && (
+          <button className="icon-button logout-btn" title="Log Out" onClick={onLogout} style={{ color: '#ef4444' }}>
+            <LogOut size={16} />
+          </button>
+        )}
       </div>
     </header>
   );

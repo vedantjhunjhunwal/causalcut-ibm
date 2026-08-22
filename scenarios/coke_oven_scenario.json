@@ -2,7 +2,7 @@
   "scenario_id": "scn-coke-oven",
   "name": "Coke Oven Flash-Fire (Design Doc \u00a78)",
   "description": "Canonical Steelforge coke-oven incident: rising ammonia + active hot-work permit PTW-007 + missing helmet on W-003 + degraded ventilation -> HE-042 flash-fire pathway.",
-  "factory_id": "steelforge-001",
+  "factory_id": "00000000-0000-0000-0000-000000000001",
   "safety_threshold": 0.15,
   "zones": [
     {

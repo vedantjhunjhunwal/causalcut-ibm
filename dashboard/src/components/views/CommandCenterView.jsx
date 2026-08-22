@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { RefreshCw, ArrowRight, ArrowUp, Activity, Play, ShieldAlert, Check } from "lucide-react";
 import { api } from "../../api";
-
+import FactoryMapView from "../FactoryMapView";
 export default function CommandCenterView({
   scenario,
   result,
@@ -186,61 +186,14 @@ export default function CommandCenterView({
       {/* Main Section: 2 Columns (Plant Risk Map & Causal Risk Network) */}
       <div className="layout-2col">
         {/* Left: Plant Risk Map */}
-        <div className="panel-box">
-          <div className="panel-header-row">
-            <div>
-              <span className="panel-title-text">PLANT RISK MAP</span>
-              <span className="panel-meta-text" style={{ marginLeft: 12 }}>
-                LIVE ZONE STATE · SELECT TO INSPECT
-              </span>
-            </div>
-            <div style={{ display: "flex", gap: 12, fontSize: 10, fontWeight: 700 }}>
-              <span style={{ color: "#10b981" }}>● normal</span>
-              <span style={{ color: "#f59e0b" }}>● elevated</span>
-              <span style={{ color: "#ef4444" }}>● alert</span>
-            </div>
-          </div>
-
-          <div className="plant-map-canvas">
-            <div className="floorplan-container">
-              <svg
-                style={{ position: "absolute", width: "100%", height: "100%", pointerEvents: "none" }}
-              >
-                <line x1="20%" y1="52%" x2="54%" y2="52%" stroke="#cbd5e1" strokeDasharray="3 3" />
-                <line x1="37%" y1="48%" x2="37%" y2="62%" stroke="#cbd5e1" strokeDasharray="3 3" />
-                <line x1="62%" y1="64%" x2="62%" y2="68%" stroke="#cbd5e1" strokeDasharray="3 3" />
-                <line x1="70%" y1="46%" x2="76%" y2="46%" stroke="#cbd5e1" strokeDasharray="3 3" />
-              </svg>
-
-              {mapZones.map((z) => {
-                const isSelected = activeSelectedZone.id === z.id;
-                return (
-                  <div
-                    key={z.id}
-                    className={`zone-block ${z.state} ${isSelected ? "selected" : ""}`}
-                    style={{ left: z.left, top: z.top, width: z.width, height: z.height }}
-                    onClick={() => setSelectedZoneId(z.id)}
-                  >
-                    <span>{z.name}</span>
-                    <span style={{ fontSize: 9.5, opacity: 0.85, marginTop: 2, fontFamily: "var(--font-mono)" }}>
-                      Risk: {z.risk}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="map-status-bar">
-            <span className="map-status-left">
-              {mapZones.length} ZONES / {sensorsCount} SENSORS
-            </span>
-            <span className="map-status-mid">
-              {activeSelectedZone.name} selected · {activeSelectedZone.state === "alert" ? "Critical hazard detected" : "1 elevated path"}
-            </span>
-            <span className="map-status-risk">RISK INDEX {activeSelectedZone.risk}</span>
-          </div>
-        </div>
+        <FactoryMapView
+          zoneRisk={result?.zone_risk}
+          graph={result?.graph || { nodes: [], edges: [] }}
+          causalPaths={result?.paths || result?.causal_paths}
+          interventions={result?.recommendation?.interventions}
+          activatedRules={result?.activated_rules || result?.recommendation?.activated_rules}
+          scenario={scenario}
+        />
 
         {/* Right: Causal Risk Network */}
         <div className="panel-box causal-network-panel">

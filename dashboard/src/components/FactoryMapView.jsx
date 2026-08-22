@@ -1,70 +1,66 @@
-import React, { useMemo } from "react";
+import React from "react";
 import FactoryMap from "./FactoryMap";
 
-const OLD_ZONE_TO_LOGICAL = {
-  "zone-1": "Coke Oven",
-  "zone-2": "Battery 3",
-  "zone-3": "Gas Treatment",
-  "zone-4": "Break Room",
-  "zone-5": "Quench Tower",
-  "zone-6": "Control Room",
-};
+export default function FactoryMapView({
+  zoneRisk = {},
+  graph = { nodes: [], edges: [] },
+  scenario,
+  causalPaths = [],
+  interventions = [],
+  activatedRules = []
+}) {
+  const nodes = graph.nodes || [];
+  const edges = graph.edges || [];
 
-export default function FactoryMapView({ zoneRisk = {}, graph }) {
-  // Convert zoneRisk and graph workers into the `entities` array format for FactoryMap
-  const entities = useMemo(() => {
-    const list = [];
-    
-    // Process risks
-    Object.entries(zoneRisk).forEach(([zoneId, risk]) => {
-      const logicalZone = OLD_ZONE_TO_LOGICAL[zoneId] || "Coke Oven";
-      let signal = "LOW";
-      if (risk >= 0.6) signal = "HIGH";
-      else if (risk >= 0.3) signal = "MEDIUM";
-
-      if (signal !== "LOW") {
-        list.push({
-          zone: logicalZone,
-          entity: "Aggregated Zone Risk",
-          state: `Risk: ${risk.toFixed(2)}`,
-          signal,
-        });
-      }
-    });
-
-    // Process workers from graph
-    if (graph && graph.nodes) {
-      graph.nodes.forEach(n => {
-        if (n.type === "worker" && n.metadata?.zone) {
-          const zoneId = n.metadata.zone;
-          const logicalZone = OLD_ZONE_TO_LOGICAL[zoneId] || "Coke Oven";
-          const isViolating = n.metadata?.ppe_compliant === false;
-          list.push({
-            zone: logicalZone,
-            entity: `Worker ${n.id}`,
-            state: isViolating ? "PPE Violation" : "Compliant",
-            signal: isViolating ? "HIGH" : "LOW",
-          });
-        }
-      });
+  // Fallback to scenario data if graph has not run yet
+  const graphZones = nodes.filter((n) => n.type === "zone");
+  const zones = graphZones.length > 0 ? graphZones : (scenario?.zones || []);
+  
+  const graphSensors = nodes.filter((n) => n.type === "sensor");
+  const sensors = graphSensors.length > 0 ? graphSensors : (scenario?.sensors || []);
+  
+  const graphWorkers = nodes.filter((n) => n.type === "worker");
+  const workers = graphWorkers.length > 0 ? graphWorkers : (scenario?.workers || []);
+  
+  const graphAssets = nodes.filter((n) => n.type === "asset");
+  const assets = graphAssets.length > 0 ? graphAssets : (scenario?.assets || []);
+  
+  const graphPermits = nodes.filter((n) => n.type === "permit");
+  const permits = graphPermits.length > 0 ? graphPermits : (scenario?.permits || []);
+  
+  // Extract rules from graph nodes if any
+  const rules = nodes.filter((n) => n.type === "rule");
+  // Merge with activatedRules prop if provided separately
+  const allRules = [...rules, ...activatedRules].reduce((acc, rule) => {
+    if (!acc.find(r => r.id === rule.id)) {
+      acc.push(rule);
     }
+    return acc;
+  }, []);
 
-    return list;
-  }, [zoneRisk, graph]);
+  const causalEdges = edges.filter((e) => e.causal === true);
 
   return (
-    <div className="panel-box" style={{ padding: 20, marginBottom: 20 }}>
-      <div className="panel-header-row" style={{ marginBottom: 12 }}>
+    <div className="panel-box" style={{ padding: 20 }}>
+      <div className="panel-header-row" style={{ marginBottom: 14 }}>
         <div>
-          <span className="panel-title-text">FACTORY SPATIAL MAP</span>
+          <span className="panel-title-text">FACTORY SPATIAL RISK MAP</span>
           <span className="panel-meta-text" style={{ marginLeft: 12 }}>
-            REAL-TIME ZONE RISK HIGHLIGHTS & WORKER TRACKING
+            DYNAMIC ENTITY GRAPH RENDERING
           </span>
         </div>
       </div>
-      
-      {/* Replaced the old "potato" map with the new FactoryMap component */}
-      <FactoryMap entities={entities} />
+      <FactoryMap
+        zones={zones}
+        sensors={sensors}
+        workers={workers}
+        assets={assets}
+        permits={permits}
+        riskLevels={zoneRisk}
+        causalPaths={causalEdges}
+        interventions={interventions}
+        activatedRules={allRules}
+      />
     </div>
   );
 }

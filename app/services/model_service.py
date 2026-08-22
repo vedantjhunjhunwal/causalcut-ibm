@@ -190,8 +190,12 @@ class GasModelService(BaseModelService):
 
     def __init__(self, xgb_path: str | None = None, iso_path: str | None = None) -> None:
         super().__init__()
-        self._xgb_path = xgb_path
-        self._iso_path = iso_path
+        self._xgb_path = xgb_path or str(
+            _REPO_ROOT / ".models" / "XGB Classifier" / "model_1&2.joblib"
+        )
+        self._iso_path = iso_path or str(
+            _REPO_ROOT / ".models" / "Isolation Forest Anomaly Detector" / "gas_sensor_isoforest_pipeline.joblib"
+        )
         self._pipeline = None
 
     def _load(self) -> None:
@@ -212,6 +216,12 @@ class GasModelService(BaseModelService):
     @property
     def artifact_path(self) -> str | None:
         return self._pipeline.xgb_path if self._pipeline else self._xgb_path
+
+    def artifact_found(self) -> bool:
+        """Both XGBoost and IsolationForest artifacts must exist."""
+        xgb_ok = self._xgb_path is not None and Path(self._xgb_path).exists()
+        iso_ok = self._iso_path is not None and Path(self._iso_path).exists()
+        return xgb_ok and iso_ok
 
     def predict(
         self,

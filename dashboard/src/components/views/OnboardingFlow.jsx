@@ -9,6 +9,7 @@ const STEPS = [
   { id: "factory",   label: "Factory Details" },
   { id: "upload",    label: "Blueprint Upload" },
   { id: "analysis",  label: "Zone Analysis" },
+  { id: "summary",   label: "Setup Summary" },
 ];
 
 const INDUSTRY_HAZARD_DEFAULTS = {
@@ -23,6 +24,7 @@ const INDUSTRY_HAZARD_DEFAULTS = {
 export default function OnboardingFlow() {
   const { session, setFactory } = useAuth();
   const [step, setStep] = useState(0);
+  const [savedFloors, setSavedFloors] = useState([]);
 
   // Step 1 — Factory details
   const [factoryForm, setFactoryForm] = useState({
@@ -132,22 +134,18 @@ export default function OnboardingFlow() {
   // Called when the BlueprintCanvas emits a confirmed layout
   const handleCanvasConfirm = async (layout) => {
     setConfirming(true);
-    const factory = {
-      name: factoryForm.name,
-      location: factoryForm.location,
-      floor: factoryForm.floor,
-      industryType: session.industryType,
+    const floorData = {
+      floorName: factoryForm.floor,
       blueprintDataUrl: imagePreview,
       zones: layout.zones,
       zone_adjacency: layout.zone_adjacency,
       sensors: layout.sensors,
-      createdAt: Date.now(),
     };
     // Small artificial delay so "Saving…" state is visible
     await new Promise((r) => setTimeout(r, 600));
-    setFactory(factory);
+    setSavedFloors((prev) => [...prev, floorData]);
     setConfirming(false);
-    // App.jsx auth gate will automatically switch to the main dashboard
+    setStep(3);
   };
 
   // ------------------------------------------------------------------ //
@@ -359,6 +357,60 @@ export default function OnboardingFlow() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* =============== STEP 4: Summary =============== */}
+        {step === 3 && (
+          <div className="ob-pane" key="summary">
+            <h2 className="ob-pane-title">Factory Setup Summary</h2>
+            <p className="ob-pane-sub">
+              Review your configured floors for <strong>{factoryForm.name}</strong>.
+            </p>
+
+            <div className="ob-floors-list">
+              {savedFloors.map((f, i) => (
+                <div key={i} className="ob-floor-item" style={{ background: "rgba(255,255,255,0.05)", padding: "12px", borderRadius: "8px", marginBottom: "8px", display: "flex", alignItems: "center", gap: "12px", border: "1px solid rgba(255,255,255,0.1)" }}>
+                  <img src={f.blueprintDataUrl} alt={f.floorName} style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "4px" }} />
+                  <div>
+                    <h4 style={{ margin: "0 0 4px 0", color: "#fff", fontSize: "15px" }}>{f.floorName || `Floor ${i + 1}`}</h4>
+                    <p style={{ margin: 0, fontSize: "13px", color: "rgba(255,255,255,0.6)" }}>
+                      {f.zones.length} Zones · {f.sensors.length} Sensors
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="ob-actions ob-actions-row" style={{ marginTop: "24px" }}>
+              <button 
+                className="ob-btn-ghost" 
+                onClick={() => {
+                  setImageFile(null);
+                  setImagePreview(null);
+                  setImageB64(null);
+                  setAnalysisResult(null);
+                  setFactoryForm(p => ({ ...p, floor: "" }));
+                  setStep(0);
+                }}
+              >
+                + Add Another Floor
+              </button>
+              <button
+                className="ob-btn-primary"
+                onClick={() => {
+                  setFactory({
+                    name: factoryForm.name,
+                    location: factoryForm.location,
+                    industryType: session.industryType,
+                    floors: savedFloors,
+                    createdAt: Date.now(),
+                  });
+                }}
+              >
+                Finish Factory Setup →
+              </button>
+            </div>
           </div>
         )}
 
