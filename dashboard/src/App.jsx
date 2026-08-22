@@ -14,11 +14,22 @@ import ApprovalsView from "./components/views/ApprovalsView";
 import ModelsView from "./components/views/ModelsView";
 import SettingsView from "./components/views/SettingsView";
 import { EMPTY_SCENARIO } from "./components/ScenarioBuilder";
+import { useAuth } from "./context/AuthContext";
+import LoginPage from "./components/views/LoginPage";
+import OnboardingFlow from "./components/views/OnboardingFlow";
 import "./App.css";
 
 export default function App() {
+  const { session, logout } = useAuth();
+
+  // Auth gate — render login or onboarding before the main dashboard
+  if (!session) return <LoginPage />;
+  if (!session.factory) return <OnboardingFlow />;
+
   const [activeTab, setActiveTab] = useState("command-center");
-  const [facility, setFacility] = useState("Steel Plant — Coke Oven Facility");
+  const facility = session.factory?.name
+    ? `${session.factory.name} — ${session.industryName}`
+    : "Steel Plant — Coke Oven Facility";
   const [selectedInterventionId, setSelectedInterventionId] = useState("INT-2047");
   const [operator, setOperator] = useState({
     name: "N. Sharma",
@@ -231,7 +242,6 @@ export default function App() {
             operator={operator}
             setOperator={setOperator}
             facility={facility}
-            setFacility={setFacility}
           />
         );
       default:

@@ -1,0 +1,375 @@
+/* ============================================================
+   BlueprintCanvas.css — Interactive zone editor
+   ============================================================ */
+
+.bc-root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(8, 14, 24, 0.6);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+/* ---- Toolbar ---- */
+.bc-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(15, 23, 38, 0.8);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  flex-wrap: wrap;
+}
+
+.bc-tool-group {
+  display: flex;
+  gap: 6px;
+}
+
+.bc-tool-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 7px;
+  padding: 6px 10px;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.bc-tool-btn:hover {
+  background: rgba(249,115,22,0.08);
+  border-color: rgba(249,115,22,0.3);
+  color: #fdba74;
+}
+
+.bc-tool-btn-active {
+  background: rgba(249,115,22,0.15) !important;
+  border-color: rgba(249,115,22,0.5) !important;
+  color: #f97316 !important;
+  font-weight: 600;
+}
+
+.bc-tool-icon { font-size: 13px; }
+.bc-tool-label { font-size: 0.77rem; }
+
+.bc-toolbar-info {
+  flex: 1;
+  font-size: 0.78rem;
+  color: #475569;
+  font-style: italic;
+}
+
+.bc-confirm-btn {
+  background: linear-gradient(135deg, #059669, #10b981);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  color: #fff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 3px 14px rgba(16,185,129,0.3);
+  white-space: nowrap;
+}
+
+.bc-confirm-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 20px rgba(16,185,129,0.45);
+}
+
+.bc-confirm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.bc-spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: bcSpin 0.7s linear infinite;
+  display: inline-block;
+}
+
+@keyframes bcSpin { to { transform: rotate(360deg); } }
+
+/* ---- Workspace ---- */
+.bc-workspace {
+  display: flex;
+  gap: 0;
+  min-height: 480px;
+  overflow: hidden;
+}
+
+/* ---- Canvas area ---- */
+.bc-canvas-wrap {
+  flex: 1;
+  overflow: auto;
+  background:
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-color: #080e18;
+  position: relative;
+}
+
+.bc-canvas {
+  position: relative;
+  display: inline-block;
+  min-width: 100%;
+}
+
+.bc-blueprint-img {
+  display: block;
+  max-width: 100%;
+  user-select: none;
+  opacity: 0.85;
+}
+
+.bc-svg-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+}
+
+/* ---- Right sidebar ---- */
+.bc-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  border-left: 1px solid rgba(255,255,255,0.07);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: rgba(11, 17, 28, 0.8);
+}
+
+.bc-sidebar-section {
+  padding: 14px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.bc-sidebar-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #475569;
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bc-badge {
+  background: rgba(249,115,22,0.15);
+  color: #f97316;
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.bc-zone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bc-zone-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 7px;
+  padding: 7px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.bc-zone-item:hover { background: rgba(249,115,22,0.06); border-color: rgba(249,115,22,0.2); }
+.bc-zone-item-sel   { background: rgba(249,115,22,0.1) !important; border-color: rgba(249,115,22,0.35) !important; }
+
+.bc-zone-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.bc-zone-info {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.bc-zone-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bc-zone-class {
+  font-size: 0.68rem;
+  color: #475569;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bc-del-btn {
+  background: none;
+  border: none;
+  color: #334155;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.bc-del-btn:hover { color: #f87171; }
+
+.bc-empty {
+  font-size: 0.75rem;
+  color: #334155;
+  font-style: italic;
+  margin: 4px 0;
+  padding: 4px 0;
+}
+
+/* ---- Zone editor popup ---- */
+.bc-editor-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bc-editor {
+  background: #0f1726;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  padding: 24px 28px;
+  width: 320px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: bcEdIn 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes bcEdIn {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.bc-editor-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin: 0 0 4px;
+}
+
+.bc-ed-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.bc-ed-input {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #f1f5f9;
+  font-size: 0.85rem;
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.bc-ed-input:focus {
+  border-color: rgba(249,115,22,0.4);
+  box-shadow: 0 0 0 2px rgba(249,115,22,0.1);
+}
+
+.bc-ed-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bc-ed-chip {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 0.73rem;
+  color: #64748b;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.bc-ed-chip:hover { background: rgba(255,255,255,0.08); }
+.bc-ed-chip-sel { font-weight: 600; }
+
+.bc-ed-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.bc-ed-save {
+  flex: 1;
+  background: linear-gradient(135deg, #ea580c, #f97316);
+  border: none;
+  border-radius: 8px;
+  padding: 9px;
+  color: #fff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.bc-ed-save:hover { opacity: 0.9; }
+
+.bc-ed-delete {
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.25);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: #f87171;
+  font-size: 0.82rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.bc-ed-delete:hover { background: rgba(239,68,68,0.2); }

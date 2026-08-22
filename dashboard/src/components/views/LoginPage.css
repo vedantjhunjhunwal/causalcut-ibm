@@ -1,0 +1,316 @@
+/* ============================================================
+   LoginPage.css — Glassmorphic dark industry login screen
+   ============================================================ */
+
+/* ---- Root ---- */
+.login-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #080e18;
+  overflow: hidden;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  z-index: 9999;
+}
+
+/* ---- Animated background orbs ---- */
+.login-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.login-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.45;
+  animation: orbFloat 12s ease-in-out infinite;
+}
+
+.login-orb-1 {
+  width: 520px;
+  height: 520px;
+  top: -120px;
+  left: -140px;
+  background: radial-gradient(circle, #f97316 0%, #7c3aed 60%, transparent 80%);
+  animation-delay: 0s;
+}
+
+.login-orb-2 {
+  width: 420px;
+  height: 420px;
+  bottom: -100px;
+  right: -80px;
+  background: radial-gradient(circle, #2563eb 0%, #0ea5e9 50%, transparent 75%);
+  animation-delay: -4s;
+}
+
+.login-orb-3 {
+  width: 320px;
+  height: 320px;
+  top: 50%;
+  left: 55%;
+  background: radial-gradient(circle, #10b981 0%, #0891b2 60%, transparent 80%);
+  animation-delay: -8s;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -25px) scale(1.04); }
+  66% { transform: translate(-20px, 20px) scale(0.97); }
+}
+
+/* ---- Glassmorphic card ---- */
+.login-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 560px;
+  background: rgba(15, 23, 38, 0.72);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 20px;
+  padding: 40px 44px 32px;
+  box-shadow:
+    0 0 0 1px rgba(249, 115, 22, 0.08),
+    0 32px 80px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+  animation: cardReveal 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes cardReveal {
+  from { opacity: 0; transform: translateY(28px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ---- Brand ---- */
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.login-logo {
+  width: 48px;
+  height: 48px;
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.login-logo svg {
+  width: 28px;
+  height: 28px;
+}
+
+.login-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #f1f5f9;
+  letter-spacing: -0.5px;
+  margin: 0 0 2px;
+  line-height: 1;
+}
+
+.login-subtitle {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+/* ---- Divider ---- */
+.login-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  margin-bottom: 20px;
+}
+
+.login-tagline {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin: 0 0 28px;
+  line-height: 1.5;
+}
+
+/* ---- Form ---- */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.lf-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lf-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.lf-label {
+  font-size: 0.77rem;
+  font-weight: 600;
+  color: #94a3b8;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.lf-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: #f1f5f9;
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.lf-input::placeholder {
+  color: #475569;
+}
+
+.lf-input:focus {
+  border-color: rgba(249, 115, 22, 0.5);
+  background: rgba(249, 115, 22, 0.04);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+}
+
+.lf-input-error {
+  border-color: rgba(239, 68, 68, 0.5) !important;
+}
+
+.lf-error {
+  font-size: 0.75rem;
+  color: #f87171;
+  margin-top: 2px;
+}
+
+/* ---- Industry type grid ---- */
+.lf-industry-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.lf-industry-chip {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 6px;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.18s;
+  font-family: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lf-industry-chip:hover {
+  background: rgba(249, 115, 22, 0.08);
+  border-color: rgba(249, 115, 22, 0.3);
+  color: #fdba74;
+}
+
+.lf-industry-chip-active {
+  background: rgba(249, 115, 22, 0.15) !important;
+  border-color: rgba(249, 115, 22, 0.6) !important;
+  color: #f97316 !important;
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.15);
+}
+
+/* ---- Submit button ---- */
+.lf-submit {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #ea580c, #f97316);
+  border: none;
+  border-radius: 10px;
+  padding: 13px 20px;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  letter-spacing: 0.2px;
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+  box-shadow: 0 4px 20px rgba(249, 115, 22, 0.35);
+}
+
+.lf-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 28px rgba(249, 115, 22, 0.5);
+}
+
+.lf-submit:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.lf-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---- Spinner ---- */
+.lf-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---- Footer note ---- */
+.login-footer {
+  text-align: center;
+  font-size: 0.72rem;
+  color: #334155;
+  margin-top: 20px;
+  margin-bottom: 0;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 600px) {
+  .login-card {
+    margin: 16px;
+    padding: 28px 22px 24px;
+  }
+
+  .lf-industry-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .lf-row {
+    grid-template-columns: 1fr;
+  }
+}
