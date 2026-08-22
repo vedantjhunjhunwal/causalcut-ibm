@@ -932,3 +932,282 @@
 .decision-action-btn:hover {
   background-color: #c2410c;
 }
+
+/* ========================================================= */
+/* FACTORY MAP COMPONENT STYLES                              */
+/* ========================================================= */
+.factory-map-container {
+  display: block;
+}
+
+.facility-shell { fill: #1a2235; stroke: #334155; stroke-width: 6; rx: 16px; }
+
+.zone { stroke-width: 2; stroke-linejoin: round; rx: 12px; transition: all 0.3s ease; }
+.zone:hover { stroke-width: 3; filter: brightness(1.2); }
+
+/* Swappable State Classes for the Dashboard */
+.state-safe { stroke: #10b981; fill: #10b981; fill-opacity: 0.1; }
+.state-elevated { stroke: #f59e0b; fill: #f59e0b; fill-opacity: 0.15; }
+.state-critical { stroke: #ef4444; fill: #ef4444; fill-opacity: 0.2; }
+.state-neutral { stroke: #475569; fill: #334155; fill-opacity: 0.3; }
+.badge-pill.connected {
+  background-color: transparent;
+  color: #10b981;
+  font-family: var(--font-mono);
+}
+
+.filter-pills-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.filter-pill {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.filter-pill:hover {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+.filter-pill.active {
+  background-color: #0f766e;
+  color: #ffffff;
+  border-color: #0f766e;
+}
+
+/* Modern Data Table */
+.data-table-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.modern-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12.5px;
+}
+
+.modern-table th {
+  background-color: #f8fafc;
+  padding: 10px 18px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.modern-table td {
+  padding: 12px 18px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.modern-table tr:hover td {
+  background-color: #f8fafc;
+}
+
+.modern-table .mono {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+/* Interventions Recommendation Queue & Decision Record */
+.recommendation-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px;
+}
+
+.rec-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 14px 16px;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.rec-card:hover {
+  border-color: #cbd5e1;
+  background-color: #f8fafc;
+}
+
+.rec-card.selected {
+  background-color: #fffbeb;
+  border-color: #fcd34d;
+  box-shadow: 0 0 0 1.5px #f59e0b;
+}
+
+.rec-code {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.rec-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.rec-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.rec-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  font-family: var(--font-mono);
+}
+
+.decision-record-box {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.decision-notice-banner {
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  border-radius: 4px;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.decision-action-btn {
+  background-color: #ea580c;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  padding: 12px 20px;
+  font-size: 13.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  box-shadow: 0 2px 4px rgba(234, 88, 12, 0.25);
+}
+
+.decision-action-btn:hover {
+  background-color: #c2410c;
+}
+
+/* ========================================================= */
+/* FACTORY MAP COMPONENT STYLES                              */
+/* ========================================================= */
+.factory-map-container {
+  display: block;
+}
+
+.facility-shell { fill: #1a2235; stroke: #334155; stroke-width: 6; rx: 16px; }
+
+.zone { stroke-width: 2; stroke-linejoin: round; rx: 12px; transition: all 0.3s ease; }
+.zone:hover { stroke-width: 3; filter: brightness(1.2); }
+
+/* Swappable State Classes for the Dashboard */
+.state-safe { stroke: #10b981; fill: #10b981; fill-opacity: 0.1; }
+.state-elevated { stroke: #f59e0b; fill: #f59e0b; fill-opacity: 0.15; }
+.state-critical { stroke: #ef4444; fill: #ef4444; fill-opacity: 0.2; }
+.state-neutral { stroke: #475569; fill: #334155; fill-opacity: 0.3; }
+
+/* Hatching for Hazardous/Restricted zones */
+.gas-hatch { stroke: #10b981; stroke-width: 1.5; opacity: 0.4; }
+.hatch-critical { stroke: #ef4444; }
+
+.door { fill: #475569; rx: 4px; }
+.machine { fill: #334155; fill-opacity: 0.6; rx: 6px; stroke: #475569; stroke-width: 1; }
+
+.map-text-label { font-family: 'Inter', sans-serif; font-weight: 600; fill: #f8fafc; font-size: 16px; letter-spacing: 0.05em; }
+.map-text-sub { font-family: 'Inter', sans-serif; font-weight: 400; fill: #94a3b8; font-size: 11px; letter-spacing: 0.02em; }
+
+.avatar-body { fill: #e2e8f0; }
+.sensor-core { fill: #38bdf8; }
+.sensor-ring { stroke: #38bdf8; stroke-width: 1.5; fill: none; opacity: 0.6; }
+
+/* Tooltip */
+.map-tooltip {
+  position: fixed;
+  pointer-events: none;
+  background-color: rgba(15, 23, 42, 0.95);
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 12px;
+  width: 260px;
+  z-index: 99999;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+}
+.tooltip-title {
+  font-weight: 600;
+  color: #f8fafc;
+  font-size: 14px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #334155;
+  padding-bottom: 6px;
+}
+.tooltip-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.tooltip-item {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.tooltip-badge {
+  margin-right: 8px;
+  font-size: 10px;
+}
+.tooltip-ent-text {
+  display: flex;
+  flex-direction: column;
+}
+.ent-name {
+  color: #cbd5e1;
+  font-weight: 500;
+}
+.ent-state {
+  color: #94a3b8;
+}
+.tooltip-empty {
+  color: #94a3b8;
+  font-size: 12px;
+  font-style: italic;
+}

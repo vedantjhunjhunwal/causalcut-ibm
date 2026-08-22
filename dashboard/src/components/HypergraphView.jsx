@@ -1,27 +1,16 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState, useEffect } from "react";
 import ReactFlow, {
   Background,
   Controls,
   MiniMap,
   useReactFlow,
   ReactFlowProvider,
+  Handle,
+  Position
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { Share2, Filter, Layers, Maximize2 } from "lucide-react";
-
-// Column assignment gives a readable left→right causal flow:
-// evidence/actors → zones → compound rules → interventions.
-const COLUMN = {
-  sensor: 0,
-  worker: 0,
-  asset: 0,
-  permit: 1,
-  zone: 2,
-  hazard: 3,
-  rule: 3,
-  intervention: 4,
-};
-const COL_X = [40, 250, 470, 720, 980];
+import dagre from "dagre";
 
 const STATUS_SWATCH = {
   normal: "#10b981",
@@ -32,19 +21,36 @@ const STATUS_SWATCH = {
 
 const FILTER_TYPES = ["zone", "sensor", "worker", "permit", "asset", "rule", "intervention"];
 
-function layout(nodes) {
-  const byCol = {};
-  return nodes.map((n) => {
-    const col = COLUMN[n.type] ?? 2;
-    byCol[col] = (byCol[col] ?? 0) + 1;
-    const idx = byCol[col] - 1;
+function getLayoutedElements(nodes, edges, direction = 'LR') {
+  const dagreGraph = new dagre.graphlib.Graph();
+  dagreGraph.setDefaultEdgeLabel(() => ({}));
+
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 150, ranksep: 300, align: "UL" });
+
+  nodes.forEach((node) => {
+    dagreGraph.setNode(node.id, { width: 250, height: 80 });
+  });
+
+  edges.forEach((edge) => {
+    dagreGraph.setEdge(edge.source, edge.target);
+  });
+
+  dagre.layout(dagreGraph);
+
+  const layoutedNodes = nodes.map((node) => {
+    const nodeWithPosition = dagreGraph.node(node.id);
     return {
-      id: n.id,
-      position: { x: COL_X[col] ?? 470, y: 40 + idx * 80 },
-      data: { ...n },
-      type: "safety",
+      ...node,
+      targetPosition: direction === 'LR' ? Position.Left : Position.Top,
+      sourcePosition: direction === 'LR' ? Position.Right : Position.Bottom,
+      position: {
+        x: nodeWithPosition.x - 75,
+        y: nodeWithPosition.y - 30,
+      },
     };
   });
+
+  return { nodes: layoutedNodes, edges };
 }
 
 function SafetyNode({ data, selected }) {
@@ -58,30 +64,34 @@ function SafetyNode({ data, selected }) {
       : "#10b981";
 
   return (
-    <div
-      style={{
-        padding: "8px 12px",
-        borderRadius: 6,
-        backgroundColor: "#ffffff",
-        border: `2px solid ${borderColor}`,
-        boxShadow: selected ? "0 0 0 2px #0d9488" : "0 1px 3px rgba(0,0,0,0.1)",
-        minWidth: 120,
-        fontSize: 12,
-      }}
-    >
+    <>
+      <Handle type="target" position={Position.Left} style={{ background: '#cbd5e1' }} />
       <div
         style={{
-          fontSize: 9,
-          fontWeight: 700,
-          textTransform: "uppercase",
-          color: "#64748b",
-          fontFamily: "var(--font-mono)",
+          padding: "14px 18px",
+          borderRadius: 8,
+          backgroundColor: "#ffffff",
+          border: `2px solid ${borderColor}`,
+          boxShadow: selected ? "0 0 0 3px #0d9488" : "0 2px 5px rgba(0,0,0,0.1)",
+          minWidth: 250,
+          fontSize: 14,
         }}
       >
-        {data.type}
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            color: "#64748b",
+            fontFamily: "var(--font-mono)",
+          }}
+        >
+          {data.type}
+        </div>
+        <div style={{ fontWeight: 600, color: "#0f172a", marginTop: 4, fontSize: 15 }}>{data.label || data.id}</div>
       </div>
-      <div style={{ fontWeight: 600, color: "#0f172a", marginTop: 2 }}>{data.label || data.id}</div>
-    </div>
+      <Handle type="source" position={Position.Right} style={{ background: '#cbd5e1' }} />
+    </>
   );
 }
 
@@ -105,31 +115,43 @@ function InnerGraph({ graph, filters }) {
     return s;
   }, [graph, filters]);
 
-  const rfNodes = useMemo(
-    () => layout(graph.nodes.filter((n) => visibleIds.has(n.id))),
-    [graph, visibleIds]
-  );
+  const { nodes: rfNodes, edges: rfEdges } = useMemo(() => {
+    const rawNodes = graph.nodes
+      .filter((n) => visibleIds.has(n.id))
+      .map((n) => ({
+        id: n.id,
+        data: { ...n },
+        type: "safety",
+      }));
 
-  const rfEdges = useMemo(
-    () =>
-      graph.edges
-        .filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
-        .map((e) => ({
-          id: e.id,
-          source: e.source,
-          target: e.target,
-          label: e.relation,
-          animated: !!e.cut || !!e.causal_path,
-          style: edgeStyle(e),
-          labelStyle: { fill: "#64748b", fontSize: 9, fontFamily: "monospace" },
-          labelBgStyle: { fill: "#ffffff", fillOpacity: 0.9 },
-          data: e,
-        })),
-    [graph, visibleIds]
-  );
+    const rawEdges = graph.edges
+      .filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
+      .map((e) => ({
+        id: e.id || `${e.source}-${e.target}`,
+        source: e.source,
+        target: e.target,
+        type: "smoothstep",
+        label: e.relation,
+        animated: !!e.cut || !!e.causal_path,
+        style: edgeStyle(e),
+        labelStyle: { fill: "#64748b", fontSize: 11, fontFamily: "monospace", fontWeight: "bold" },
+        labelBgStyle: { fill: "#ffffff", fillOpacity: 0.95, padding: 4 },
+        data: e,
+      }));
+
+    return getLayoutedElements(rawNodes, rawEdges, 'LR');
+  }, [graph, visibleIds]);
 
   const onNodeClick = useCallback((_, node) => setSelected({ kind: "node", ...node.data }), []);
   const onEdgeClick = useCallback((_, edge) => setSelected({ kind: "edge", ...edge.data }), []);
+
+  useEffect(() => {
+    if (rfNodes.length) {
+      setTimeout(() => {
+        rf.fitView({ duration: 400, padding: 0.2 });
+      }, 50);
+    }
+  }, [rfNodes, rf]);
 
   return (
     <>
@@ -141,7 +163,7 @@ function InnerGraph({ graph, filters }) {
         onEdgeClick={onEdgeClick}
         onPaneClick={() => setSelected(null)}
         fitView
-        minZoom={0.2}
+        minZoom={0.3}
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
       >
@@ -157,10 +179,10 @@ function InnerGraph({ graph, filters }) {
       <div style={{ position: "absolute", bottom: 12, left: 12, zIndex: 6 }}>
         <button
           className="action-btn"
-          style={{ padding: "4px 8px", fontSize: 11 }}
-          onClick={() => rf.fitView({ duration: 400 })}
+          style={{ padding: "8px 12px", fontSize: 12 }}
+          onClick={() => rf.fitView({ duration: 400, padding: 0.2 })}
         >
-          <Maximize2 size={12} />
+          <Maximize2 size={14} />
           <span>Fit Screen</span>
         </button>
       </div>
@@ -172,19 +194,19 @@ function InnerGraph({ graph, filters }) {
             top: 12,
             right: 12,
             zIndex: 10,
-            width: 260,
+            width: 280,
             backgroundColor: "#ffffff",
             border: "1px solid #cbd5e1",
             borderRadius: 6,
-            padding: 12,
+            padding: 14,
             boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
           }}
         >
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 10 }}>
             {selected.kind === "node" ? "Node" : "Edge"} Inspector
           </div>
           {selected.kind === "node" ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11.5 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <b style={{ color: "#64748b" }}>ID:</b>
                 <span className="mono" style={{ color: "#0f172a" }}>{selected.id}</span>
@@ -207,7 +229,7 @@ function InnerGraph({ graph, filters }) {
               )}
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11.5 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <b style={{ color: "#64748b" }}>Relation:</b>
                 <span>{selected.relation}</span>
@@ -254,7 +276,7 @@ export default function HypergraphView({ graph, loading, error }) {
           <button
             key={t}
             className={`filter-pill ${filters.has(t) ? "active" : ""}`}
-            style={{ padding: "3px 10px", fontSize: 10.5 }}
+            style={{ padding: "4px 12px", fontSize: 11 }}
             onClick={() => toggle(t)}
           >
             {t}
@@ -262,7 +284,7 @@ export default function HypergraphView({ graph, loading, error }) {
         ))}
         <button
           className="action-btn"
-          style={{ padding: "3px 8px", fontSize: 10.5, marginLeft: 6 }}
+          style={{ padding: "4px 10px", fontSize: 11, marginLeft: 6 }}
           onClick={() => setFilters(new Set(FILTER_TYPES))}
         >
           Reset
@@ -272,7 +294,7 @@ export default function HypergraphView({ graph, loading, error }) {
       <div
         style={{
           width: "100%",
-          height: 380,
+          height: 600, // Increased from 380 for better viewing of entire factory graph
           backgroundColor: "#f8fafc",
           borderRadius: 6,
           border: "1px solid #e2e8f0",
@@ -300,7 +322,7 @@ export default function HypergraphView({ graph, loading, error }) {
       </div>
 
       {/* Legend */}
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 10, fontSize: 11, fontWeight: 600 }}>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 12, fontSize: 12, fontWeight: 600 }}>
         <span style={{ color: "#10b981" }}>● normal</span>
         <span style={{ color: "#f59e0b" }}>● warning</span>
         <span style={{ color: "#ef4444" }}>● critical</span>

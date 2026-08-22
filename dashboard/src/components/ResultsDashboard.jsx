@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import Plot from "react-plotly.js";
-import HypergraphView from "./HypergraphView";
+import FactoryMapView from "./FactoryMapView";
 import ModelProvenance from "./ModelProvenance";
 import {
   ShieldAlert,
@@ -165,8 +165,8 @@ export default function ResultsDashboard({ result, decision, onDecide, deciding 
         <ZoneCards zoneRisk={result.zone_risk} graph={graph} />
       </div>
 
-      {/* 5. Interactive Hypergraph */}
-      <HypergraphView graph={graph} />
+      {/* 5. 2D Factory Spatial Map */}
+      <FactoryMapView zoneRisk={result.zone_risk} graph={graph} />
 
       {/* 6. Activated Compound Rules & Causal Paths (2 Columns) */}
       <div className="layout-2col" style={{ marginBottom: 0 }}>

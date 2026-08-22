@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { RefreshCw, Filter, ShieldCheck, Users, Cpu, FileText } from "lucide-react";
 import { api } from "../../api";
+import FactoryMap from "../FactoryMap";
 
 export default function PlantStateView({ scenario, result }) {
   const [activeZone, setActiveZone] = useState("ALL");
@@ -149,6 +150,9 @@ export default function PlantStateView({ scenario, result }) {
           </button>
         ))}
       </div>
+
+      {/* Interactive Map Layout */}
+      <FactoryMap entities={filteredRows} />
 
       {/* Structured State Register Table Panel */}
       <div className="panel-box" style={{ marginBottom: 22 }}>
