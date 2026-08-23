@@ -43,6 +43,10 @@ class CandidateIntervention:
     # Which of the chain's contributing factors this removes.
     breaks_factors: frozenset[str] = field(default_factory=frozenset)
     info_class: InformationClass = InformationClass.COUNTERFACTUAL
+    # G1 — Bow-Tie: whether this intervention stops the top event (preventive)
+    # or limits consequences after it (mitigative). Changes CP-SAT cost model
+    # weighting because preventive cuts should be preferred.
+    barrier_role: str = "preventive"  # Literal["preventive", "mitigative"]
 
 
 @dataclass
@@ -98,6 +102,11 @@ class AccidentPath:
     propagation_zones: list[str]
     sub_pathways: list[SubPathway] = field(default_factory=list)
     candidate_interventions: list[CandidateIntervention] = field(default_factory=list)
+    # G1 — Bow-Tie: the loss-of-control event this path leads to.
+    # Populated by PathExtractor from the activating CompoundRule.top_event.
+    top_event: str = ""
+    # G4 — Incident Pattern: similar historical incidents (populated by Agent 2).
+    similar_incidents: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -105,6 +114,7 @@ class AccidentPath:
             "pathway": self.pathway,
             "severity": self.severity,
             "root_zone": self.root_zone,
+            "top_event": self.top_event,
             "nodes": list(self.subgraph.nodes),
             "edges": [
                 {"source": u, "target": v, **d}
@@ -127,6 +137,7 @@ class AccidentPath:
                     "execution_time_min": c.execution_time_min,
                     "breaks_factors": sorted(c.breaks_factors),
                     "info_class": c.info_class.value,
+                    "barrier_role": c.barrier_role,
                 }
                 for c in self.candidate_interventions
             ],
@@ -222,6 +233,7 @@ class PathExtractor:
             contributing_factors=contributing_factors,
             propagation_zones=propagation_zones,
             sub_pathways=sub_pathways,
+            top_event=hyperedge.top_event,  # G1 — bow-tie passthrough
         )
         path.candidate_interventions = self._candidate_interventions(hyperedge, root_zone, contributing_factors)
         return path

@@ -142,6 +142,11 @@ class Hyperedge(BaseModel):
     activation_time: Optional[datetime] = None
     activated: bool = False
     synthetic_flag: bool = False
+    # G1 — Bow-Tie: the loss-of-control event this hyperedge encodes.
+    # Populated by CompoundRule.evaluate_zone() from CompoundRule.top_event.
+    top_event: str = ""
+    # G1 — Bow-Tie: provenance reference (HAZOP worksheet / OISD clause).
+    source_reference: str = ""
 
     def dominant_info_class(self) -> InformationClass:
         """The weakest-trust class among satisfied conditions.

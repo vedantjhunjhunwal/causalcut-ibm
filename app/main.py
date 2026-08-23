@@ -39,6 +39,7 @@ from app.db.session import Database, set_db
 from app.queue.consumer import ConsumerPool
 from app.queue.event_queue import EventQueue
 from app.engine.risk_engine import RiskEngine
+from app.engine.bowtie import BowTieRegistry
 from app.analysis.handover_validator import HandoverValidator
 from app.gateway.auth import AuthService
 from app.gateway.audit_log import AuditLog
@@ -73,6 +74,11 @@ async def lifespan(app: FastAPI):
         risk_engine.graph, ack_grace_minutes=settings.handover_ack_grace_min
     )
 
+    # G1 -- Build bow-tie registry from the live rule set
+    bowtie_registry = BowTieRegistry()
+    bowtie_registry.build_from_rules(risk_engine.rules.rules)
+    log.info("bowtie registry built", extra={"count": len(bowtie_registry)})
+
     consumers = ConsumerPool(
         queue=queue,
         db=db,
@@ -89,6 +95,7 @@ async def lifespan(app: FastAPI):
     app.state.auth = auth
     app.state.audit = audit
     app.state.handover_validator = handover_validator
+    app.state.bowtie_registry = bowtie_registry  # G1
 
     try:
         yield

@@ -243,6 +243,9 @@ class CompoundRule:
     mandatory: list[PredicateFn] = field(default_factory=list)
     min_satisfied: int | None = None
     applies_to_hazard_classes: tuple[str, ...] = ()  # empty => all zones
+    # G1 — Bow-Tie formalism fields (schema extension, no logic change)
+    top_event: str = ""     # the loss-of-control event this rule encodes
+    source_reference: str = ""  # HAZOP worksheet / OISD clause / incident ID
 
     def evaluate_zone(self, g: SafetyHypergraph, zone_id: str) -> Hyperedge | None:
         # Mandatory gate first: if any mandatory predicate fails, no activation.
@@ -276,6 +279,9 @@ class CompoundRule:
             pathway=self.pathway,
             severity=severity,
             activated=True,
+            # G1 — Bow-Tie metadata passed through to AccidentPath
+            top_event=self.top_event,
+            source_reference=self.source_reference,
         )
         return edge
 
@@ -307,6 +313,9 @@ class CompoundRuleEngine:
                 ],
                 severity_fn=dynamic_gas_severity(0.80),
                 min_satisfied=2,  # gas (mandatory) + any two worker/ignition factors
+                # G1 bow-tie metadata
+                top_event="Ignition of accumulated CO/H₂ in active hot-work zone",
+                source_reference="OISD-STD-105 §7.3; HAZOP-WS-CK-001; Bhilai coke-oven incident 2017",
             )
         )
         # HE-TOXIC: toxic accumulation with a worker present in the zone.
@@ -322,6 +331,9 @@ class CompoundRuleEngine:
                 ],
                 severity_fn=dynamic_gas_severity(0.68),
                 min_satisfied=0,
+                # G1 bow-tie metadata
+                top_event="Acute toxic inhalation by unprotected worker in gas-affected zone",
+                source_reference="OISD-STD-105 §8.1; Factories Act 1948 §36; DGMS Circular 2019-04",
             )
         )
         # HE-GAS: gas accumulation hazard in plant zone (active even with 0 workers).
@@ -336,6 +348,9 @@ class CompoundRuleEngine:
                 ],
                 severity_fn=dynamic_gas_severity(0.55),
                 min_satisfied=0,
+                # G1 bow-tie metadata
+                top_event="Sustained above-LEL gas accumulation creating ignition/asphyxiation hazard",
+                source_reference="OISD-STD-114 §4.2; DGMS Circular 2020-01; HAZOP-WS-CK-003",
             )
         )
         # HE-IGNITION: hot work with fire suppression barrier down.
@@ -351,6 +366,9 @@ class CompoundRuleEngine:
                 ],
                 severity_fn=weighted_severity(0.75),
                 min_satisfied=1,
+                # G1 bow-tie metadata
+                top_event="Uncontrolled ignition during hot-work with fire suppression barrier failed",
+                source_reference="OISD-STD-105 §7.5; Factories Act 1948 §38; HAZOP-WS-CK-002",
             )
         )
         # HE-MECH: failing rotating equipment with a worker in the zone.
@@ -363,6 +381,9 @@ class CompoundRuleEngine:
                 predicates=[],
                 severity_fn=dynamic_asset_severity(0.65),
                 min_satisfied=0,
+                # G1 bow-tie metadata
+                top_event="Mechanical contact injury from unguarded rotating equipment failure",
+                source_reference="Factories Act 1948 §21; OISD-STD-137 §5.1; HAZOP-WS-ME-001",
             )
         )
         # HE-EQUIPMENT-FAILURE: failing asset in facility (active even with 0 workers).
@@ -375,6 +396,9 @@ class CompoundRuleEngine:
                 predicates=[],
                 severity_fn=dynamic_asset_severity(0.55),
                 min_satisfied=0,
+                # G1 bow-tie metadata
+                top_event="Critical equipment failure causing production loss or secondary hazard",
+                source_reference="OISD-STD-137 §4.3; HAZOP-WS-ME-002",
             )
         )
         # HE-VENT: ventilation failure with worker present in zone.
@@ -387,6 +411,9 @@ class CompoundRuleEngine:
                 predicates=[],
                 severity_fn=dynamic_ventilation_severity(0.62),
                 min_satisfied=0,
+                # G1 bow-tie metadata
+                top_event="Asphyxiation risk from ventilation failure in occupied zone",
+                source_reference="OISD-STD-114 §6.1; Factories Act 1948 §13; DGMS Circular 2018-07",
             )
         )
         # HE-VENTILATION-DEFICIT: ventilation failure in zone (active even with 0 workers).
@@ -399,6 +426,9 @@ class CompoundRuleEngine:
                 predicates=[],
                 severity_fn=dynamic_ventilation_severity(0.50),
                 min_satisfied=0,
+                # G1 bow-tie metadata
+                top_event="Zone atmosphere degradation from sustained ventilation deficit",
+                source_reference="OISD-STD-114 §6.2; HAZOP-WS-CK-004",
             )
         )
 

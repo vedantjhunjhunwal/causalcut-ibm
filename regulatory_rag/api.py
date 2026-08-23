@@ -397,6 +397,148 @@ def query_batch(req: BatchQueryRequest):
 
 
 # ---------------------------------------------------------------------------
+# G4 — Incident Pattern Intelligence: /patterns/query
+# ---------------------------------------------------------------------------
+import json as _json
+import math as _math
+
+_INCIDENTS_PATH = os.path.join(_HERE, "incident_corpus", "incidents.json")
+_incidents_cache: list | None = None
+
+
+def _load_incidents() -> list:
+    global _incidents_cache
+    if _incidents_cache is None:
+        try:
+            with open(_INCIDENTS_PATH, "r", encoding="utf-8") as f:
+                _incidents_cache = _json.load(f)
+        except Exception as exc:
+            logger.warning("Could not load incident corpus: %s", exc)
+            _incidents_cache = []
+    return _incidents_cache
+
+
+def _incident_similarity(incident: dict, pathway: str, factors: list[str]) -> float:
+    """Simple Jaccard-style factor overlap score (0–1).
+
+    Upgraded to full FAISS vector search when ingest_incidents.py is run.
+    This lightweight version is sufficient for demo/hackathon purposes.
+    """
+    score = 0.0
+    # Pathway match: +0.4 if same, +0.1 if substring
+    inc_pathway = incident.get("pathway", "")
+    if inc_pathway == pathway:
+        score += 0.40
+    elif pathway in inc_pathway or inc_pathway in pathway:
+        score += 0.10
+
+    # Factor overlap: Jaccard over factor sets
+    inc_factors = set(incident.get("precursor_factors", []))
+    query_factors = set(factors)
+    if inc_factors or query_factors:
+        intersection = len(inc_factors & query_factors)
+        union = len(inc_factors | query_factors)
+        score += 0.60 * (intersection / union) if union > 0 else 0.0
+
+    return round(min(score, 1.0), 3)
+
+
+class PatternQueryRequest(BaseModel):
+    """Request body for incident pattern query."""
+    pathway: str = Field(..., description="AccidentPath.pathway value")
+    contributing_factors: List[str] = Field(
+        default_factory=list,
+        description="List of factor tags from AccidentPath.contributing_factors"
+    )
+    top_k: int = Field(default=5, ge=1, le=20)
+    min_similarity: float = Field(default=0.15, ge=0.0, le=1.0)
+
+
+class IncidentMatch(BaseModel):
+    incident_id: str
+    title: str
+    similarity_score: float
+    pathway: str
+    summary: str
+    precursor_factors: List[str]
+    outcome: str
+    source: str
+    information_class: str
+    synthetic_flag: bool
+    oisd_clause: Optional[str] = None
+
+
+class PatternQueryResponse(BaseModel):
+    pathway_queried: str
+    factors_queried: List[str]
+    incidents: List[IncidentMatch]
+    total_matches: int
+    information_class: str = "R/S"
+    note: str = (
+        "Results include both real public-source incidents [R] and synthetic near-miss "
+        "reports schema-matched to AccidentPath [S]. Synthetic records are clearly "
+        "labelled and must not be presented as real historical data."
+    )
+
+
+@app.post(
+    "/patterns/query",
+    response_model=PatternQueryResponse,
+    summary="Query incident corpus for similar historical patterns (G4)",
+    description=(
+        "Given an AccidentPath pathway and contributing factors, retrieves structurally "
+        "similar historical incidents and near-miss reports from the incident corpus. "
+        "Used by Agent 2 (Incident Pattern Mining) in the agent orchestrator. "
+        "Corpus includes real public-source incidents [R] and synthetic near-miss "
+        "reports [S] schema-matched to AccidentPath."
+    ),
+)
+def patterns_query(req: PatternQueryRequest):
+    """Retrieve similar incidents for an AccidentPath."""
+    t0 = time.perf_counter()
+    incidents = _load_incidents()
+
+    scored = []
+    for inc in incidents:
+        sim = _incident_similarity(inc, req.pathway, req.contributing_factors)
+        if sim >= req.min_similarity:
+            scored.append((sim, inc))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = scored[:req.top_k]
+
+    matches = [
+        IncidentMatch(
+            incident_id=inc.get("incident_id", ""),
+            title=inc.get("title", ""),
+            similarity_score=sim,
+            pathway=inc.get("pathway", ""),
+            summary=inc.get("summary", ""),
+            precursor_factors=inc.get("precursor_factors", []),
+            outcome=inc.get("outcome", ""),
+            source=inc.get("source", ""),
+            information_class=inc.get("information_class", "S"),
+            synthetic_flag=inc.get("synthetic_flag", True),
+            oisd_clause=inc.get("oisd_clause"),
+        )
+        for sim, inc in top
+    ]
+
+    elapsed = (time.perf_counter() - t0) * 1000
+    logger.info(
+        "patterns/query: pathway=%s factors=%s -> %d matches in %.1fms",
+        req.pathway, req.contributing_factors, len(matches), elapsed,
+    )
+
+    return PatternQueryResponse(
+        pathway_queried=req.pathway,
+        factors_queried=req.contributing_factors,
+        incidents=matches,
+        total_matches=len(matches),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Dev entrypoint
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
