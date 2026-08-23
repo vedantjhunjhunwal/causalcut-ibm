@@ -89,6 +89,17 @@ export const api = {
   stats: () => fetch(`${API}/stats`).then(json).catch(() => null),
   modelStatus: () => fetch(`${API}/models/status`).then(json).catch(() => null),
   modelReadiness: () => fetch(`${API}/models/readiness`).then(json).catch(() => null),
+
+  // Agentic AI — read-only Safety Intelligence chat. Never writes/approves
+  // anything; it can only report, explain and simulate (see
+  // app/engine/agent_tools.py for the enforced tool whitelist).
+  agentStatus: () => fetch(`${API}/agent/status`).then(json).catch(() => null),
+  agentChat: (message, sessionId = null) =>
+    fetch(`${API}/agent/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, session_id: sessionId }),
+    }).then(envelope),
 };
 
 // ---------------------------------------------------------------------------

@@ -156,3 +156,12 @@ tests/         test suite
 .models/       trained model artifacts
 regulatory_rag/FAISS index and verifier
 ```
+
+---
+
+## Future Scope / To Be Implemented
+1. Check all buttons in the UI if functional.
+2. Use supabase pgvector as the vector db instead of FAISS because it takes memory and time for that better on a cloud.
+3. Scenarios aren't being saved in the db. Chats aren't being saved in the db too.
+4. A notification panel would be great to demonstrate how the system works.
+5. Find a way to demonstrate the forecasting model (Prophet/ARIMA/SARIMA) for future problems detection.

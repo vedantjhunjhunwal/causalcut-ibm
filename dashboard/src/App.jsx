@@ -14,6 +14,7 @@ import LiveEventsView from "./components/views/LiveEventsView";
 import ApprovalsView from "./components/views/ApprovalsView";
 import ModelsView from "./components/views/ModelsView";
 import SettingsView from "./components/views/SettingsView";
+import AiAgentView from "./components/views/AiAgentView";
 import ChatDrawer from "./components/ChatDrawer";
 import { MessageSquare } from "lucide-react";
 import { EMPTY_SCENARIO } from "./components/ScenarioBuilder";
@@ -312,6 +313,8 @@ export default function App() {
         return <AuditLogView />;
       case "models":
         return <ModelsView result={result} />;
+      case "ai-agent":
+        return <AiAgentView />;
       case "system-health":
         return <SystemHealthView />;
       case "settings":
@@ -357,40 +360,14 @@ export default function App() {
         {renderActiveView()}
       </div>
 
-      {/* Floating AI Chat Button */}
-      <button 
-        className="floating-chat-btn"
-        onClick={() => setIsChatOpen(true)}
-        style={{
-          position: "fixed",
-          bottom: "24px",
-          right: "24px",
-          width: "56px",
-          height: "56px",
-          borderRadius: "50%",
-          backgroundColor: "#3b82f6",
-          color: "white",
-          border: "none",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 900,
-          transition: "transform 0.2s"
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.1)"}
-        onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
-      >
-        <MessageSquare size={24} />
-      </button>
-
-      {/* Agentic Chat Drawer */}
-      <ChatDrawer 
-        isOpen={isChatOpen} 
-        onClose={() => setIsChatOpen(false)} 
-        factoryId={facility?.id} 
-      />
+      {/* Agentic Safety Intelligence chat — read-only, see ChatDrawer.jsx */}
+      {/* Hide the FAB when AI Agent tab is active (chat is already in the main view) */}
+      {!isChatOpen && activeTab !== "ai-agent" && (
+        <button className="chat-fab" onClick={() => setIsChatOpen(true)} aria-label="Open Safety Intelligence chat">
+          <MessageSquare size={22} />
+        </button>
+      )}
+      <ChatDrawer open={isChatOpen} onClose={() => setIsChatOpen(false)} />
     </div>
   );
 }

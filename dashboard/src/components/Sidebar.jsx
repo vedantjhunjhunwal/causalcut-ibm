@@ -14,6 +14,7 @@ import {
   Activity,
   Settings,
   ChevronDown,
+  Bot,
 } from "lucide-react";
 
 export default function Sidebar({ activeTab, setActiveTab, pendingApprovalsCount = 2, operator }) {
@@ -48,6 +49,12 @@ export default function Sidebar({ activeTab, setActiveTab, pendingApprovalsCount
         { id: "approvals", label: "Approvals", icon: ClipboardCheck, badge: pendingApprovalsCount },
         { id: "audit-log", label: "Audit log", icon: FileSearch },
         { id: "models", label: "Models", icon: Cpu },
+      ],
+    },
+    {
+      group: "AI AGENT",
+      items: [
+        { id: "ai-agent", label: "Safety Intelligence", icon: Bot },
       ],
     },
     {

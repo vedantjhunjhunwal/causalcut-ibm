@@ -100,8 +100,21 @@ class Settings(BaseSettings):
 
     # --- Security -------------------------------------------------------
     api_key: str | None = None  # if set, required on write endpoints
-    gemini_api_key: str | None = None
     docs_enabled: bool = True
+
+    # --- Agentic AI (read-only Safety Intelligence chat) -----------------
+    # Off by default: ships dark until a deployment deliberately turns it on.
+    # The agent can only READ (plant state, risk engine, models, audit log,
+    # regulatory corpus) — see app/engine/agent_tools.py. It cannot approve
+    # or dispatch anything; that stays behind /risk/approve.
+    agent_enabled: bool = False
+    gemini_api_key: str | None = None
+    # Model name is fully configurable since availability changes over time —
+    # verify current model names in Google AI Studio / the Gemini API docs
+    # before deploying. The agent includes an automatic fallback cascade
+    # (see GEMINI_MODEL_CASCADE in agent_service.py) so if the configured
+    # model returns 404/429/5xx, it will try the next available model.
+    agent_model_name: str = "gemini-3.5-flash"
 
     # --- Supabase -------------------------------------------------------
     supabase_url: str | None = None
