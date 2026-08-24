@@ -9,7 +9,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
 
     # --- Queue ----------------------------------------------------------
     queue_max_size: int = 10_000
-    queue_consumer_count: int = 2
+    queue_consumer_count: int = 8
     queue_put_timeout_seconds: float = 0.5
     dead_letter_max_retries: int = 3
 
@@ -108,7 +108,7 @@ class Settings(BaseSettings):
     # regulatory corpus) — see app/engine/agent_tools.py. It cannot approve
     # or dispatch anything; that stays behind /risk/approve.
     agent_enabled: bool = False
-    gemini_api_key: str | None = None
+    gemini_api_key: str | None = Field(default=None, validation_alias=AliasChoices("GEMINI_API_KEY", "CAUSALCUT_GEMINI_API_KEY"))
     # Model name is fully configurable since availability changes over time —
     # verify current model names in Google AI Studio / the Gemini API docs
     # before deploying. The agent includes an automatic fallback cascade
@@ -117,8 +117,9 @@ class Settings(BaseSettings):
     agent_model_name: str = "gemini-3.5-flash"
 
     # --- Supabase -------------------------------------------------------
-    supabase_url: str | None = None
-    supabase_service_role_key: str | None = None
+    supabase_url: str | None = Field(default=None, validation_alias=AliasChoices("SUPABASE_URL", "CAUSALCUT_SUPABASE_URL"))
+    supabase_service_role_key: str | None = Field(default=None, validation_alias=AliasChoices("SUPABASE_SERVICE_ROLE_KEY", "CAUSALCUT_SUPABASE_SERVICE_ROLE_KEY"))
+    supabase_anon_key: str | None = Field(default=None, validation_alias=AliasChoices("SUPABASE_ANON_KEY", "CAUSALCUT_SUPABASE_ANON_KEY"))
 
 
 @lru_cache(maxsize=1)

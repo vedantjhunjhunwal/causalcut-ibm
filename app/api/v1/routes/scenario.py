@@ -173,10 +173,12 @@ async def run(
 
     # --- Upsert factory to satisfy foreign key constraint ---
     try:
-        request.app.state.db.client.table("factories").upsert({
-            "id": scenario.factory_id,
-            "name": scenario.name or "Dummy Factory"
-        }).execute()
+        await asyncio.to_thread(
+            lambda: request.app.state.db.client.table("factories").upsert({
+                "id": scenario.factory_id,
+                "name": scenario.name or "Dummy Factory"
+            }).execute()
+        )
     except Exception:
         pass
     run_id = f"run-{uuid.uuid4().hex[:10]}"
@@ -290,10 +292,12 @@ async def start(
 
     # --- Upsert factory to satisfy foreign key constraint ---
     try:
-        request.app.state.db.client.table("factories").upsert({
-            "id": scenario.factory_id,
-            "name": scenario.name or "Dummy Factory"
-        }).execute()
+        await asyncio.to_thread(
+            lambda: request.app.state.db.client.table("factories").upsert({
+                "id": scenario.factory_id,
+                "name": scenario.name or "Dummy Factory"
+            }).execute()
+        )
     except Exception:
         pass
 

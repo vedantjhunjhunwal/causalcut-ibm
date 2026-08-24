@@ -145,6 +145,25 @@ export default function App() {
     };
   }, []);
 
+  // Global keyboard shortcut listener to toggle Safety Intelligence chat drawer
+  // Supports Cmd+K, Ctrl+K, Cmd+/, Ctrl+/, and Escape to close
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Don't intercept if user is typing in an input or textarea (unless modifier key is used)
+      const target = e.target;
+      const isInput = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+
+      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K" || e.key === "/")) {
+        e.preventDefault();
+        setIsChatOpen((prev) => !prev);
+      } else if (e.key === "Escape" && isChatOpen) {
+        setIsChatOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isChatOpen]);
+
   useEffect(() => () => socketRef.current?.close(), []);
 
   const resetRunState = () => {
@@ -200,9 +219,12 @@ export default function App() {
 
       if (!res.ok) {
         setPhase("error");
+        const reason = data.result?.failure_reason || data.detail || data.error || (data.errors ? JSON.stringify(data.errors) : "Simulation pipeline failed.");
+        const failures = data.result?.failures || data.errors || [];
         setFailure({
-          reason: data.detail || data.error || "Simulation pipeline failed.",
-          failures: data.errors || [],
+          reason: reason,
+          failures: failures,
+          stage: data.result?.failure_stage,
         });
         return data;
       }
@@ -347,6 +369,8 @@ export default function App() {
         setActiveTab={setActiveTab}
         pendingApprovalsCount={result?.recommendation?.interventions?.length ?? 0}
         operator={operator}
+        isChatOpen={isChatOpen}
+        onToggleChat={() => setIsChatOpen((prev) => !prev)}
       />
 
       {/* Main Content Area */}

@@ -23,15 +23,15 @@ function LoadingScreen() {
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      background: "#0a0c0f",
+      background: "#F4F5F7",
       fontFamily: "Inter, sans-serif",
-      color: "rgba(255,255,255,0.5)",
+      color: "#6B7280",
       flexDirection: "column",
       gap: "16px",
     }}>
       <div style={{
         width: 40, height: 40,
-        border: "3px solid rgba(74,140,181,0.2)",
+        border: "3px solid rgba(74,140,181,0.15)",
         borderTopColor: "#4A8CB5",
         borderRadius: "50%",
         animation: "spin 0.8s linear infinite",

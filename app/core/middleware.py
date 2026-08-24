@@ -62,18 +62,20 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
         self.timeout = timeout_seconds
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint):
+        # Scenario pipeline endpoints are compute/IO intensive and have their own internal timeouts
+        effective_timeout = 180.0 if "/scenario/" in request.url.path else self.timeout
         try:
-            return await asyncio.wait_for(call_next(request), timeout=self.timeout)
+            return await asyncio.wait_for(call_next(request), timeout=effective_timeout)
         except asyncio.TimeoutError:
             log.error(
                 "request timeout",
-                extra={"path": request.url.path, "timeout_s": self.timeout},
+                extra={"path": request.url.path, "timeout_s": effective_timeout},
             )
             return JSONResponse(
                 status_code=504,
                 content={
                     "error": "request_timeout",
-                    "detail": f"exceeded {self.timeout}s",
+                    "detail": f"exceeded {effective_timeout}s",
                     "correlation_id": correlation_id_ctx.get(),
                 },
             )

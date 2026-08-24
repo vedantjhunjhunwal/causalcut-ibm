@@ -123,14 +123,21 @@ async def run_scenario_pipeline(
         # --- 4. Persist (append-only store) then enqueue -------------------
         await emit("persisting_events", status="running", total=len(all_events))
         expected = 0
-        for ev in all_events:
-            result = await ingest_canonical_event(ev, events_repo, queue, settings)
-            if result.status is ProcessingStatus.ACCEPTED:
+        results = await asyncio.gather(
+            *(ingest_canonical_event(ev, events_repo, queue, settings) for ev in all_events),
+            return_exceptions=True,
+        )
+        for ev, res in zip(all_events, results):
+            if isinstance(res, Exception):
+                ingestion["rejected"] += 1
+                ingestion["failed"] += 1
+                ingestion["details"].append(f"{ev.event_id}: {res}")
+            elif res.status is ProcessingStatus.ACCEPTED:
                 ingestion["accepted"] += 1
                 expected += 1
-            elif result.status is ProcessingStatus.DUPLICATE:
+            elif res.status is ProcessingStatus.DUPLICATE:
                 ingestion["duplicates"] += 1
-            elif result.status is ProcessingStatus.QUEUE_FULL:
+            elif res.status is ProcessingStatus.QUEUE_FULL:
                 ingestion["queue_full"] += 1
                 ingestion["failed"] += 1
                 ingestion["details"].append(
@@ -138,7 +145,7 @@ async def run_scenario_pipeline(
             else:
                 ingestion["rejected"] += 1
                 ingestion["failed"] += 1
-                ingestion["details"].append(f"{ev.event_id}: {result.detail}")
+                ingestion["details"].append(f"{ev.event_id}: {res.detail}")
         await emit("persisting_events", status="ok", persisted=ingestion["accepted"],
                    rejected=ingestion["rejected"])
 

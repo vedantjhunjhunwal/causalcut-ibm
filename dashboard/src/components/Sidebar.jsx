@@ -17,7 +17,14 @@ import {
   Bot,
 } from "lucide-react";
 
-export default function Sidebar({ activeTab, setActiveTab, pendingApprovalsCount = 2, operator }) {
+export default function Sidebar({
+  activeTab,
+  setActiveTab,
+  pendingApprovalsCount = 2,
+  operator,
+  isChatOpen = false,
+  onToggleChat,
+}) {
   const currentOperator = operator || {
     name: "N. Sharma",
     role: "SHIFT OFFICER · B",
@@ -85,12 +92,26 @@ export default function Sidebar({ activeTab, setActiveTab, pendingApprovalsCount
             <div className="nav-item-list">
               {section.items.map((item) => {
                 const Icon = item.icon;
-                const isActive = activeTab === item.id;
+                const isAiAgent = item.id === "ai-agent";
+                const isActive = isAiAgent ? isChatOpen : activeTab === item.id;
+                
+                const handleClick = () => {
+                  if (isAiAgent) {
+                    if (onToggleChat) {
+                      onToggleChat();
+                    } else {
+                      setActiveTab(item.id);
+                    }
+                  } else {
+                    setActiveTab(item.id);
+                  }
+                };
+
                 return (
                   <div
                     key={item.id}
                     className={`nav-item ${isActive ? "active" : ""}`}
-                    onClick={() => setActiveTab(item.id)}
+                    onClick={handleClick}
                   >
                     <Icon size={16} strokeWidth={isActive ? 2.2 : 1.8} />
                     <span>{item.label}</span>

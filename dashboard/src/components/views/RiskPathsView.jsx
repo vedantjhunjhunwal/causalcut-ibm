@@ -34,33 +34,39 @@ export default function RiskPathsView({ result, onNavigate }) {
         {/* Left: Risk Paths List */}
         <div className="panel-box">
           <div className="panel-header-row">
-            <span className="panel-title-text">DETECTED PATHWAYS · 2 ACTIVE</span>
+            <span className="panel-title-text">DETECTED PATHWAYS · {riskPaths.length} ACTIVE</span>
             <GitBranch size={14} color="#64748b" />
           </div>
 
           <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-            {riskPaths.map((p) => {
-              const pId = p.id || p.hyperedge_id;
-              const isSelected = selectedPath === pId;
-              return (
-                <div
-                  key={pId}
-                  className={`rec-card ${isSelected ? "selected" : ""}`}
-                  onClick={() => setSelectedPath(pId)}
-                >
-                  <div className="rec-code">{pId} · Origin: {p.root_zone || p.rootZone}</div>
-                  <div className="rec-title-row">
-                    <span className="rec-name" style={{ fontSize: 13 }}>{p.pathway}</span>
-                    <span className={`badge-pill ${p.severity > 0.6 ? "high" : "medium"}`}>
-                      ● {(p.severity * 10).toFixed(1)} / 10
-                    </span>
+            {riskPaths.length > 0 ? (
+              riskPaths.map((p) => {
+                const pId = p.id || p.hyperedge_id;
+                const isSelected = selectedPath === pId;
+                return (
+                  <div
+                    key={pId}
+                    className={`rec-card ${isSelected ? "selected" : ""}`}
+                    onClick={() => setSelectedPath(pId)}
+                  >
+                    <div className="rec-code">{pId} · Origin: {p.root_zone || p.rootZone}</div>
+                    <div className="rec-title-row">
+                      <span className="rec-name" style={{ fontSize: 13 }}>{p.pathway}</span>
+                      <span className={`badge-pill ${p.severity > 0.6 ? "high" : "medium"}`}>
+                        ● {(p.severity * 10).toFixed(1)} / 10
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
+                      Propagates to: <b>{(p.propagation_zones || p.propagationZones || []).join(" → ")}</b>
+                    </div>
                   </div>
-                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-                    Propagates to: <b>{(p.propagation_zones || p.propagationZones || []).join(" → ")}</b>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div style={{ padding: "30px 14px", textAlign: "center", color: "#64748b", fontSize: 12.5 }}>
+                No active risk paths. Run a simulation scenario to compute compound failure pathways.
+              </div>
+            )}
           </div>
         </div>
 

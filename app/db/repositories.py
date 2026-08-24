@@ -177,8 +177,14 @@ class EventRepository:
 
     async def mark_processed(self, event_id: uuid.UUID) -> None:
         def _exec():
-            self.db.client.table('events').update({'processed': 1}).eq('event_id', str(event_id)).execute()
-        await _supabase_call(_exec)
+            try:
+                self.db.client.table('events').update({'processed': 1}).eq('event_id', str(event_id)).execute()
+            except Exception:
+                pass
+        try:
+            asyncio.create_task(_supabase_call(_exec, max_retries=1))
+        except RuntimeError:
+            pass
 
     async def counts_by_class(self) -> dict[str, int]:
         def _exec():
