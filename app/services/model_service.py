@@ -659,7 +659,7 @@ class RegulatoryModelService(BaseModelService):
         if self._corpus is None:
             try:
                 import json as _json
-                self._corpus = _json.loads(self.corpus_path.read_text())
+                self._corpus = _json.loads(self.corpus_path.read_text(encoding="utf-8"))
             except Exception as exc:
                 log.warning("regulatory corpus unavailable: %s", exc)
                 self._corpus = []

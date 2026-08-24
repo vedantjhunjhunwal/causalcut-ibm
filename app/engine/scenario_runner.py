@@ -341,13 +341,15 @@ def _build_graph_payload(
 
 
 # --------------------------------------------------------------------------- #
-# Explanation (template-based; LLM optional per design §9.2)
+# Explanation — LLM narrative with template fallback (design §9.2)
 # --------------------------------------------------------------------------- #
-def _explain(scenario, paths, recommendation, tth, citations) -> str:
+def _build_template_explanation(scenario, paths, recommendation, tth, citations) -> str:
+    """Pure-template fallback — no external calls, always succeeds."""
     if not paths:
-        return ("No compound accident pathway is currently active for this "
-                "scenario. All monitored conditions are below activation "
-                "thresholds.")
+        return (
+            "No compound accident pathway is currently active for this "
+            "scenario. All monitored conditions are below activation thresholds."
+        )
     worst = max(paths, key=lambda p: p.severity)
     lines = [
         f"Scenario '{scenario.name}' activated {len(paths)} compound pathway(s). "
@@ -372,6 +374,136 @@ def _explain(scenario, paths, recommendation, tth, citations) -> str:
         lines.append("Regulatory basis: " + "; ".join(c["clause"] for c in citations) + " [R].")
     lines.append("This is a recommendation only — no action executes without human approval [H].")
     return " ".join(lines)
+
+
+def _explain(scenario, paths, recommendation, tth, citations) -> str:
+    """Generate a plain-English operator briefing via Gemini.
+
+    Falls back to the template string if:
+    - GEMINI_API_KEY is not configured
+    - The google-generativeai package is not installed
+    - The Gemini call times out or errors
+    """
+    template = _build_template_explanation(scenario, paths, recommendation, tth, citations)
+    if not paths:
+        return template
+
+    try:
+        from app.core.config import get_settings
+        settings = get_settings()
+        api_key = settings.gemini_api_key
+        if not api_key:
+            return template
+    except Exception:
+        return template
+
+    # Build a rich context block for Gemini
+    worst = max(paths, key=lambda p: p.severity)
+    all_factors: list[str] = []
+    for p in paths:
+        all_factors.extend(p.contributing_factors or [])
+    unique_factors = list(dict.fromkeys(all_factors))  # preserve order, deduplicate
+
+    zone_names = {z.zone_id: z.name for z in scenario.zones}
+    worst_zone_name = zone_names.get(worst.root_zone, worst.root_zone)
+
+    workers_info = []
+    for w in scenario.workers:
+        missing = getattr(w, "missing_ppe", []) or []
+        ppe_status = f"missing PPE: {', '.join(missing)}" if missing else "fully equipped"
+        workers_info.append(f"Worker {w.worker_id} in {zone_names.get(w.zone_id, w.zone_id)} ({ppe_status})")
+
+    permit_info = [
+        f"Permit {pm.permit_id} ({pm.permit_type}, {pm.status}) in {zone_names.get(pm.zone_id, pm.zone_id)}"
+        for pm in scenario.permits
+    ]
+
+    intervention_text = ""
+    if recommendation and recommendation.interventions:
+        iv_lines = [
+            f"  {i+1}. {iv.action} (target: {iv.target_node}, cost: {iv.cost_category}, exec: {iv.execution_time_min} min)"
+            for i, iv in enumerate(recommendation.interventions)
+        ]
+        intervention_text = "Recommended interventions (minimum causal cut):\n" + "\n".join(iv_lines)
+        intervention_text += f"\nProjected residual risk after interventions: {recommendation.residual_risk:.2f} (threshold: {recommendation.safety_threshold:.2f}) — {'✓ THRESHOLD MET' if recommendation.threshold_met else '✗ THRESHOLD NOT MET'}"
+    else:
+        intervention_text = "No minimum causal cut could be computed (no active pathways required action)."
+
+    citation_text = ""
+    if citations:
+        citation_text = "Applicable regulatory clauses: " + "; ".join(
+            f"{c.get('clause', '')} — {c.get('text', '')[:120]}" for c in citations
+        )
+
+    tth_text = ""
+    if tth is not None:
+        if tth == 0.0:
+            tth_text = "⚠ TIME-TO-HARM: IMMEDIATE — harm threshold already breached."
+        else:
+            tth_text = f"Estimated time to harm threshold breach: {tth/60:.1f} minutes."
+
+    prompt = f"""You are a process-safety AI assistant for an industrial plant control room.
+A safety analysis system (CAUSALCUT) has just completed a scenario run. Write a clear, authoritative,
+plain-English operator briefing that a shift officer can read and act on immediately.
+
+FORMAT RULES:
+- Write in flowing paragraphs (no bullet points, no markdown headers)
+- Start with the most critical risk, then explain what it means in human terms
+- Explain WHY the situation is dangerous (causal factors, interplay of conditions)
+- Describe the recommended actions and their rationale
+- Close with the regulatory basis and a reminder that human approval is required
+- Use plain English — no jargon-heavy codes like "HE-042" unless explained
+- Total length: 4-6 sentences
+
+=== SCENARIO CONTEXT ===
+Scenario name: {scenario.name}
+Description: {scenario.description or '(none)'}
+Factory: {scenario.factory_id}
+
+=== HAZARD ANALYSIS ===
+Active compound pathways: {len(paths)}
+Dominant pathway: {worst.pathway.replace('_', ' ')} in {worst_zone_name} (severity score: {worst.severity:.2f}/1.00)
+{tth_text}
+Contributing causal factors: {', '.join(unique_factors) if unique_factors else 'see pathway details'}
+
+Workers on site: {'; '.join(workers_info) if workers_info else 'none declared'}
+Active permits: {'; '.join(permit_info) if permit_info else 'none'}
+
+=== RECOMMENDED ACTIONS ===
+{intervention_text}
+
+=== REGULATORY BASIS ===
+{citation_text if citation_text else 'Regulatory citations not available for this run.'}
+
+Write the operator briefing now:"""
+
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        model_name = getattr(get_settings(), "agent_model_name", "gemini-2.0-flash")
+        # Try primary model, fall back to flash
+        for mn in [model_name, "gemini-2.0-flash", "gemini-1.5-flash"]:
+            try:
+                m = genai.GenerativeModel(mn)
+                response = m.generate_content(
+                    prompt,
+                    generation_config=genai.GenerationConfig(
+                        temperature=0.4,
+                        max_output_tokens=512,
+                    )
+                )
+                text = response.text.strip()
+                if text:
+                    return text
+            except Exception:
+                continue
+        return template
+    except ImportError:
+        log.warning("google-generativeai not installed — using template explanation")
+        return template
+    except Exception as exc:
+        log.warning("Gemini explanation call failed: %s — using template fallback", exc)
+        return template
 
 
 # --------------------------------------------------------------------------- #
@@ -562,6 +694,28 @@ def analyse_graph(
     reg = (verify_interventions(actions, zone_ctx, correlation_id=cid,
                                 scenario_id=scenario.scenario_id)
            if actions else {"citations": [], "degraded": False, "provenance": None})
+
+    # Fallback: if FAISS returned no citations (index not built or degraded),
+    # synthesise citations from activated compound rules' source_reference fields.
+    # Every activated rule already embeds real OISD/DGMS clause references.
+    if not reg.get("citations") and activated:
+        seen: set[str] = set()
+        fallback_citations: list[dict] = []
+        for edge in activated:
+            ref = getattr(edge, "source_reference", "") or ""
+            if not ref or ref in seen:
+                continue
+            seen.add(ref)
+            top_event = getattr(edge, "top_event", "") or ""
+            pathway_label = getattr(edge, "pathway", "").replace("_", " ")
+            fallback_citations.append({
+                "clause": ref,
+                "text": top_event or f"See {ref} for applicable safety requirements.",
+                "action": f"Activated pathway: {pathway_label}" if pathway_label else "",
+                "source": "compound_rule_static",
+            })
+        if fallback_citations:
+            reg = {**reg, "citations": fallback_citations, "degraded": not bool(actions)}
 
     _progress(6)  # explain
     graph_payload = _build_graph_payload(scenario, graph, zone_risk, activated, paths, recommendation)

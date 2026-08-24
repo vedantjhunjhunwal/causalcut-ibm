@@ -136,6 +136,15 @@ class QueryRequest(BaseModel):
         le=30.0,
         description="Max seconds to wait for FAISS search before returning an unverified result.",
     )
+    mode: str = Field(
+        default=config.RETRIEVAL_MODE,
+        description=(
+            "Retrieval mode: 'hybrid' (BM25 + FAISS fused via RRF — recommended), "
+            "'semantic' (FAISS cosine similarity only), "
+            "'keyword' (BM25 term matching only). "
+            "Hybrid improves recall for exact clause references (e.g. 'OISD-116 §4.3', 'LEL')."
+        ),
+    )
 
     @field_validator("source_type")
     @classmethod
@@ -147,6 +156,14 @@ class QueryRequest(BaseModel):
             )
         return v
 
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, v: str) -> str:
+        valid = {"hybrid", "semantic", "keyword"}
+        if v not in valid:
+            raise ValueError(f"Invalid mode '{v}'. Must be one of: {sorted(valid)}")
+        return v
+
 
 class EvidenceChunk(BaseModel):
     """A single retrieved regulatory chunk."""
@@ -156,11 +173,14 @@ class EvidenceChunk(BaseModel):
     source_type: str = Field(description="Source category (oisd_standard | factories_act | dgms_circular).")
     similarity: float = Field(description="Cosine similarity score (0-1, higher is more relevant).")
     text: str = Field(description="Full text of the retrieved chunk.")
+    bm25_score: float = Field(default=0.0, description="BM25 term-match score (hybrid/keyword modes only).")
+    rrf_score: float = Field(default=0.0, description="Reciprocal Rank Fusion score (hybrid mode only).")
 
 
 class QueryResponse(BaseModel):
     """Response from a single regulatory query."""
     query: str = Field(description="The original query string.")
+    mode: str = Field(default="hybrid", description="Retrieval mode used.")
     verified: bool = Field(
         description=(
             "True if retrieval completed within the timeout. "

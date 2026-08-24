@@ -7,8 +7,8 @@ behind ``POST /risk/approve``, gated by real auth and the hash-chained
 audit log, exactly as before this feature existed.
 
 Feature-flagged: returns 503 (not a silent no-op) if ``CAUSALCUT_AGENT_ENABLED``
-is false or no Gemini API key is configured, so a misconfigured deployment
-fails loudly in the dashboard rather than pretending to work.
+is false or no API key is configured (Gemini or Groq), so a misconfigured
+deployment fails loudly in the dashboard rather than pretending to work.
 """
 
 from __future__ import annotations
@@ -42,15 +42,28 @@ async def agent_chat(payload: AgentChatIn, request: Request, response: Response)
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {
             "error": "agent_disabled",
-            "detail": "Set CAUSALCUT_AGENT_ENABLED=true (and CAUSALCUT_GEMINI_API_KEY) to enable the agent.",
+            "detail": (
+                "Set CAUSALCUT_AGENT_ENABLED=true and either CAUSALCUT_GEMINI_API_KEY "
+                "(provider=gemini) or CAUSALCUT_GROQ_API_KEY with CAUSALCUT_AGENT_LLM_PROVIDER=groq "
+                "to enable the agent."
+            ),
         }
 
-    service = get_agent_service(settings.gemini_api_key, settings.agent_model_name)
+    service = get_agent_service(
+        api_key=settings.gemini_api_key,
+        model_name=settings.agent_model_name,
+        provider=settings.agent_llm_provider,
+        groq_api_key=settings.groq_api_key,
+    )
     if not service.enabled:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {
             "error": "agent_unavailable",
-            "detail": "Missing CAUSALCUT_GEMINI_API_KEY, invalid model name, or google-generativeai not installed.",
+            "detail": (
+                "Missing API key or LLM SDK not installed. "
+                "For Gemini: set CAUSALCUT_GEMINI_API_KEY and install google-genai. "
+                "For Groq: set CAUSALCUT_GROQ_API_KEY, set CAUSALCUT_AGENT_LLM_PROVIDER=groq, and install groq."
+            ),
         }
 
     try:
@@ -67,12 +80,19 @@ async def agent_chat(payload: AgentChatIn, request: Request, response: Response)
 async def agent_status() -> dict[str, Any]:
     settings = get_settings()
     configured = False
+    service = None
     if settings.agent_enabled:
-        service = get_agent_service(settings.gemini_api_key, settings.agent_model_name)
+        service = get_agent_service(
+            api_key=settings.gemini_api_key,
+            model_name=settings.agent_model_name,
+            provider=settings.agent_llm_provider,
+            groq_api_key=settings.groq_api_key,
+        )
         configured = service.enabled
     return {
         "enabled": settings.agent_enabled,
         "configured": configured,
+        "provider": settings.agent_llm_provider,
         "model": settings.agent_model_name if settings.agent_enabled else None,
         "model_cascade": service.model_cascade if configured else [],
         "read_only": True,

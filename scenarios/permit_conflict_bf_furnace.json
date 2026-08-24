@@ -1,0 +1,127 @@
+{
+  "scenario_id": "scn-permit-conflict-001",
+  "name": "Gas Zone — Conflicting Permits (Hot Work + Confined Space Entry)",
+  "description": "During maintenance on TANK-GAS-01, a hot-work permit and a confined-space-entry permit are both active in the Gas Storage/Chemical Zone. Gas concentration is rising due to a slow leak from the degraded cylinder. Ventilation is degraded. Two workers inside lack gas masks. Should trigger HE-PERMIT-CONFLICT and HE-PERMIT-CONDITIONS-VIOLATED simultaneously.",
+  "factory_id": "00000000-0000-0000-0000-000000000003",
+  "safety_threshold": 0.12,
+  "zones": [
+    {
+      "zone_id": "zone-cnc",
+      "name": "CNC Machining Floor",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 150.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 0.9
+    },
+    {
+      "zone_id": "zone-hyd",
+      "name": "Hydraulic Press Bay",
+      "hazard_class": "high_risk",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-gas",
+      "name": "Gas Storage / Chemical Zone",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 50.0,
+      "ventilation_status": "degraded",
+      "ventilation_flow_ratio": 0.30
+    },
+    {
+      "zone_id": "zone-ppe",
+      "name": "PPE Checkpoint",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-ctrl",
+      "name": "Control Room",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-break",
+      "name": "Break Room",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 250.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-entry",
+      "name": "Main Entrance / Exit",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 250.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    }
+  ],
+  "zone_adjacency": [
+    {"zone_a": "zone-cnc", "zone_b": "zone-hyd", "medium": "shared_wall"},
+    {"zone_a": "zone-cnc", "zone_b": "zone-ppe", "medium": "ventilation_duct"},
+    {"zone_a": "zone-gas", "zone_b": "zone-ppe", "medium": "ventilation_duct"},
+    {"zone_a": "zone-gas", "zone_b": "zone-cnc", "medium": "ventilation_duct"},
+    {"zone_a": "zone-hyd", "zone_b": "zone-ctrl", "medium": "shared_utility"},
+    {"zone_a": "zone-ppe", "zone_b": "zone-ctrl", "medium": "shared_wall"},
+    {"zone_a": "zone-ctrl", "zone_b": "zone-break", "medium": "shared_wall"},
+    {"zone_a": "zone-ctrl", "zone_b": "zone-entry", "medium": "shared_wall"},
+    {"zone_a": "zone-break", "zone_b": "zone-entry", "medium": "shared_wall"}
+  ],
+  "assets": [
+    {"asset_id": "TANK-GAS-01", "zone_id": "zone-gas", "asset_type": "gas_cylinder", "condition": "degraded", "failure_probability": 0.65},
+    {"asset_id": "TANK-GAS-02", "zone_id": "zone-gas", "asset_type": "gas_cylinder", "condition": "nominal", "failure_probability": 0.10}
+  ],
+  "sensors": [
+    {"sensor_id": "GS-GAS-A", "zone_id": "zone-gas", "modality": "gas", "unit": "ppm"},
+    {"sensor_id": "GS-GAS-B", "zone_id": "zone-gas", "modality": "gas", "unit": "ppm"},
+    {"sensor_id": "GS-CNC-A", "zone_id": "zone-cnc", "modality": "gas", "unit": "ppm"}
+  ],
+  "gas_readings": [
+    {
+      "sensor_id": "GS-GAS-A", "zone_id": "zone-gas", "gas_type": "chlorine",
+      "concentration_ppm": 25.0, "severity": 0.35, "confidence": 0.90, "offset_seconds": 60
+    },
+    {
+      "sensor_id": "GS-GAS-A", "zone_id": "zone-gas", "gas_type": "chlorine",
+      "concentration_ppm": 58.0, "severity": 0.72, "confidence": 0.94, "offset_seconds": 180
+    },
+    {
+      "sensor_id": "GS-GAS-B", "zone_id": "zone-gas", "gas_type": "chlorine",
+      "concentration_ppm": 55.0, "severity": 0.70, "confidence": 0.91, "offset_seconds": 200
+    },
+    {
+      "sensor_id": "GS-GAS-A", "zone_id": "zone-gas", "gas_type": "chlorine",
+      "concentration_ppm": 95.0, "severity": 0.88, "confidence": 0.97, "offset_seconds": 300
+    }
+  ],
+  "machine_readings": [],
+  "hydraulic_readings": [],
+  "workers": [
+    {"worker_id": "W-GAS-01", "zone_id": "zone-gas", "present": true, "missing_ppe": ["gas_mask", "chemical_gloves"]},
+    {"worker_id": "W-GAS-02", "zone_id": "zone-gas", "present": true, "missing_ppe": ["gas_mask"]},
+    {"worker_id": "W-PPE-01", "zone_id": "zone-ppe", "present": true, "missing_ppe": []},
+    {"worker_id": "W-CTRL-01", "zone_id": "zone-ctrl", "present": true, "missing_ppe": []}
+  ],
+  "permits": [
+    {"permit_id": "PTW-GAS-HW-001", "zone_id": "zone-gas", "permit_type": "hot_work", "status": "active", "worker_id": "W-GAS-01"},
+    {"permit_id": "PTW-GAS-CSE-001", "zone_id": "zone-gas", "permit_type": "confined_space_entry", "status": "active", "worker_id": "W-GAS-02"}
+  ],
+  "events": [],
+  "metadata": {
+    "shift": "dayshift",
+    "author": "CausalCut Test Suite",
+    "test_target": "HE-PERMIT-CONFLICT (hot_work + confined_space_entry) + HE-PERMIT-CONDITIONS-VIOLATED",
+    "expected_rules": ["HE-PERMIT-CONFLICT", "HE-PERMIT-CONDITIONS-VIOLATED", "HE-GAS-THRESHOLD-BREACH"],
+    "expected_cut": [
+      "Suspend PTW-GAS-CSE-001 (confined space entry takes priority for suspension)",
+      "Evacuate W-GAS-01 and W-GAS-02 (no gas masks in chlorine zone)",
+      "Restore ventilation to Gas Storage zone"
+    ]
+  }
+}

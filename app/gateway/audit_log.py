@@ -94,8 +94,10 @@ class AuditLog:
             )
             record.record_hash = record.compute_hash()
 
+            # NOTE: do NOT include 'seq' — the column is GENERATED ALWAYS AS IDENTITY
+            # in Supabase/Postgres, meaning the DB owns the sequence and will reject
+            # any explicit value with error code 428C9.  We read it back after insert.
             data = {
-                "seq": record.seq,
                 "timestamp": record.timestamp,
                 "correlation_id": record.correlation_id,
                 "recommendation_id": record.recommendation_id,
@@ -111,7 +113,17 @@ class AuditLog:
 
             db = get_db()
             if db.client:
-                db.client.table("audit_log").insert(data).execute()
+                try:
+                    res = db.client.table("audit_log").insert(data).execute()
+                    # Read the DB-generated seq back so our in-process counter
+                    # stays anchored to the database's authoritative sequence.
+                    if res.data and res.data[0].get("seq") is not None:
+                        record.seq = res.data[0]["seq"]
+                        self._seq = record.seq
+                except Exception as db_exc:
+                    logger.error("audit DB insert failed: %s", db_exc)
+                    # Still return the record — in-process chain is maintained
+                    # even if the DB write failed.
 
             self._last_hash = record.record_hash
             logger.info(

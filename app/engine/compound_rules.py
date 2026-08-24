@@ -166,6 +166,79 @@ def equipment_failing(threshold: float = 0.5) -> PredicateFn:
     return _pred
 
 
+def conflicting_permits() -> PredicateFn:
+    """Detect simultaneous incompatible permit types in the same zone.
+
+    Hot work (ignition source) combined with confined space entry (worker
+    trapped, limited egress) is the canonical OISD-STD-105 §7.4 conflict:
+    an ignition event while a worker is in an enclosed space with no rapid
+    escape route. The risk is categorically higher than either permit alone.
+
+    Information class is SYNTHETIC because permits are user/system-generated
+    data — they are not sensor observations.
+    """
+    _INCOMPATIBLE_PAIRS: list[frozenset[str]] = [
+        frozenset({"hot_work", "confined_space_entry"}),
+        frozenset({"hot_work", "electrical_isolation"}),  # switching during hot work
+    ]
+
+    def _pred(g: SafetyHypergraph, zone_id: str) -> ConditionResult:
+        active = g.active_permits_in_zone(zone_id)
+        active_types = {g.node(p).get("permit_type", "") for p in active}
+        conflicting: list[str] = []
+        for pair in _INCOMPATIBLE_PAIRS:
+            if pair <= active_types:
+                conflicting.extend(
+                    p for p in active if g.node(p).get("permit_type") in pair
+                )
+        # Use the highest-priority (most dangerous) conflicting permit as node.
+        priority = {"confined_space_entry": 0, "electrical_isolation": 1, "hot_work": 2}
+        if conflicting:
+            conflicting.sort(key=lambda p: priority.get(g.node(p).get("permit_type", ""), 99))
+        satisfied = bool(conflicting)
+        return ConditionResult(
+            node=conflicting[0] if conflicting else f"{zone_id}:permit",
+            predicate=f"conflicting permits active in zone: {sorted(active_types)}",
+            satisfied=satisfied,
+            info_class=InformationClass.SYNTHETIC,
+            observed_value=conflicting,
+        )
+    return _pred
+
+
+def hot_work_permit_with_rising_gas() -> PredicateFn:
+    """Detect a hot-work permit that was issued before gas conditions exceeded threshold.
+
+    A hot-work permit is safe at issuance but becomes a condition violation
+    the moment gas rises above threshold in the same zone — OISD-STD-116 §4.3
+    mandates immediate suspension in this case.
+    """
+    def _pred(g: SafetyHypergraph, zone_id: str) -> ConditionResult:
+        zone = g.node(zone_id)
+        ppm = zone.get("last_gas_ppm")
+        limit = zone.get("baseline_gas_threshold_ppm", 200.0)
+        gas_exceeded = ppm is not None and ppm > limit
+        if not gas_exceeded:
+            return ConditionResult(
+                node=zone_id, predicate="hot_work permit conditions violated by rising gas",
+                satisfied=False, info_class=InformationClass.SYNTHETIC,
+            )
+        # Find any active hot-work permit whose issuance predates the gas reading.
+        hw_permits = [
+            p for p in g.active_permits_in_zone(zone_id)
+            if g.node(p).get("permit_type") == "hot_work"
+        ]
+        satisfied = bool(hw_permits)
+        return ConditionResult(
+            node=hw_permits[0] if hw_permits else f"{zone_id}:hot_work",
+            predicate="hot_work permit conditions violated by rising gas",
+            satisfied=satisfied,
+            info_class=InformationClass.SYNTHETIC,
+            observed_value={"ppm": ppm, "limit": limit, "permits": hw_permits},
+        )
+    return _pred
+
+
 # --------------------------------------------------------------------------- #
 # Severity models
 # --------------------------------------------------------------------------- #
@@ -431,6 +504,46 @@ class CompoundRuleEngine:
                 source_reference="OISD-STD-114 §6.2; HAZOP-WS-CK-004",
             )
         )
+        # HE-PERMIT-CONFLICT: simultaneously active incompatible permit types.
+        # Hot work + confined space entry is the canonical case — an ignition
+        # event (hot work) with a worker physically enclosed (confined space)
+        # and limited egress creates a trapped-worker scenario.
+        # OISD-STD-105 §7.4 explicitly prohibits this combination.
+        self.add_rule(
+            CompoundRule(
+                template_id="HE-PERMIT-CONFLICT",
+                name="Incompatible permits simultaneously active in same zone",
+                pathway="trapped_worker_ignition",
+                mandatory=[conflicting_permits()],
+                predicates=[worker_present()],
+                severity_fn=weighted_severity(0.85),
+                min_satisfied=0,
+                # G1 bow-tie metadata
+                top_event="Worker trapped in confined space during active hot-work ignition event",
+                source_reference="OISD-STD-105 §7.4; Factories Act 1948 §87; DGMS Circular 2019-04",
+            )
+        )
+        # HE-PERMIT-CONDITIONS-VIOLATED: a hot-work permit remains active after
+        # gas conditions in the zone exceed the safe threshold — the permit
+        # was issued when conditions were safe but is now a standing ignition
+        # hazard. OISD-STD-116 §4.3 mandates immediate suspension on any gas
+        # concentration alarm in the affected zone.
+        self.add_rule(
+            CompoundRule(
+                template_id="HE-PERMIT-CONDITIONS-VIOLATED",
+                name="Hot-work permit active under conditions that violate original issuance basis",
+                pathway="permit_conditions_violated",
+                mandatory=[hot_work_permit_with_rising_gas()],
+                predicates=[],
+                severity_fn=dynamic_gas_severity(0.75),
+                min_satisfied=0,
+                # G1 bow-tie metadata
+                top_event="Ignition risk from hot-work permit persisting after gas threshold breach",
+                source_reference="OISD-STD-116 §4.3; DGMS Circular 2019-04",
+            )
+        )
+
+
 
     def evaluate(self) -> list[Hyperedge]:
         """Run every rule against every applicable zone.

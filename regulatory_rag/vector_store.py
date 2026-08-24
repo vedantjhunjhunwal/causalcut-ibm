@@ -233,6 +233,17 @@ class _VectorStore:
 # Module-level singleton
 _store = _VectorStore()
 
+# BM25 singleton — initialized lazily like the FAISS store.
+# Import is local so the module loads even if rank-bm25 is not installed;
+# BM25 calls will degrade gracefully to empty results (see bm25_store.py).
+try:
+    from bm25_store import BM25Store as _BM25Store
+    _bm25_store = _BM25Store(corpus_file=config.BM25_CORPUS_FILE)
+except ImportError:
+    _bm25_store = None  # type: ignore[assignment]
+    logger.warning("bm25_store module not found — BM25 retrieval unavailable")
+
+
 
 # --------------------------------------------------------------------------
 # Public API (matches the interface the rest of CAUSALCUT expects)
@@ -244,11 +255,12 @@ def ingest_document(
     text: str,
 ) -> List[Chunk]:
     """
-    Chunk one regulatory document and (re-)store it in FAISS.
+    Chunk one regulatory document and (re-)store it in FAISS and BM25.
 
     Deletes any existing chunks for this doc_id before inserting the new
     set (same rationale as the original ChromaDB version -- see chunker.py's
     Chunk.chunk_id docstring on why upsert-by-id alone is insufficient).
+    Both stores are updated atomically so they remain in sync.
     """
     chunks = chunk_document(
         doc_id=doc_id, source_type=source_type, title=title, text=text
@@ -259,8 +271,10 @@ def ingest_document(
 
     # Delete existing vectors for this doc_id (idempotent re-ingestion)
     _store.delete_by_doc_id(doc_id)
+    if _bm25_store is not None:
+        _bm25_store.delete_by_doc_id(doc_id)
 
-    # Embed chunk texts
+    # Embed chunk texts (FAISS)
     texts = [c.text for c in chunks]
     embeddings = _embed(texts)
 
@@ -272,9 +286,17 @@ def ingest_document(
         m["text"] = c.text
         metas.append(m)
 
+    # Add to FAISS
     _store.add(embeddings, metas)
-    logger.info("Ingested %d chunks for doc_id=%s", len(chunks), doc_id)
+
+    # Add to BM25 (keyword index)
+    if _bm25_store is not None:
+        _bm25_store.add(texts, metas)
+
+    logger.info("Ingested %d chunks for doc_id=%s (FAISS + BM25)", len(chunks), doc_id)
     return chunks
+
+
 
 
 def ingest_corpus(documents: Iterable[dict]) -> int:
@@ -290,8 +312,10 @@ def ingest_corpus(documents: Iterable[dict]) -> int:
         chunks = ingest_document(**doc)
         total += len(chunks)
 
-    # Persist to disk after the full corpus is ingested
+    # Persist both stores to disk after the full corpus is ingested
     _store.save()
+    if _bm25_store is not None:
+        _bm25_store.save()
     return total
 
 
@@ -303,6 +327,8 @@ def query(
 ) -> dict:
     """
     Retrieve the top-k regulatory chunks most relevant to `query_text`.
+    Uses semantic (FAISS cosine similarity) search only.
+    For hybrid BM25+FAISS search, use query_hybrid().
     """
     try:
         q_emb = _embed([query_text])
@@ -311,6 +337,103 @@ def query(
     except Exception as exc:
         logger.warning("Regulatory retrieval failed: %s", exc)
         return {"evidence": [], "verified": False, "reason": str(exc)}
+
+
+def query_bm25(
+    query_text: str,
+    top_k: int = config.RETRIEVAL_TOP_K,
+    source_type: Optional[str] = None,
+) -> dict:
+    """BM25 keyword-only retrieval. Best for exact regulatory references."""
+    if _bm25_store is None:
+        return {"evidence": [], "verified": False, "reason": "BM25 store not available"}
+    try:
+        results = _bm25_store.search(query_text, top_k=top_k, source_type=source_type)
+        # Normalize keys to match FAISS result format (similarity -> bm25_score kept)
+        for r in results:
+            r.setdefault("similarity", 0.0)
+        return {"evidence": results, "verified": True, "reason": None}
+    except Exception as exc:
+        logger.warning("BM25 retrieval failed: %s", exc)
+        return {"evidence": [], "verified": False, "reason": str(exc)}
+
+
+def query_hybrid(
+    query_text: str,
+    top_k: int = config.RETRIEVAL_TOP_K,
+    source_type: Optional[str] = None,
+    rrf_k: int = config.RRF_K,
+) -> dict:
+    """Hybrid BM25 + FAISS retrieval fused via Reciprocal Rank Fusion (RRF).
+
+    RRF formula (Cormack, Clarke & Buettcher 2009):
+        score(doc) = 1/(rrf_k + rank_bm25) + 1/(rrf_k + rank_faiss)
+
+    Advantages over weighted score fusion:
+    - Scale-invariant: BM25 scores (unbounded integers) and cosine scores
+      ([0,1]) cannot be directly combined with a fixed weight. RRF uses only
+      rank positions, making it robust across both.
+    - rrf_k=60 is the standard constant; higher values downweight rank gaps.
+
+    Returns the top-k chunks by RRF score, with both similarity scores included.
+    """
+    # Fetch candidates from both indexes (over-fetch for better coverage)
+    fetch_k = min(top_k * 3, 50)
+
+    try:
+        q_emb = _embed([query_text])
+        faiss_results = _store.search(q_emb, top_k=fetch_k, source_type=source_type)
+    except Exception as exc:
+        logger.warning("FAISS search failed in hybrid query: %s", exc)
+        faiss_results = []
+
+    bm25_results: list[dict] = []
+    if _bm25_store is not None:
+        try:
+            bm25_results = _bm25_store.search(query_text, top_k=fetch_k, source_type=source_type)
+        except Exception as exc:
+            logger.warning("BM25 search failed in hybrid query: %s", exc)
+
+    if not faiss_results and not bm25_results:
+        return {"evidence": [], "verified": False, "reason": "Both retrievers returned empty results"}
+
+    # Build chunk_id -> metadata lookup
+    chunk_meta: dict[str, dict] = {}
+    for r in faiss_results + bm25_results:
+        cid = r.get("chunk_id", "")
+        if cid and cid not in chunk_meta:
+            chunk_meta[cid] = r
+
+    # Compute RRF scores
+    rrf_scores: dict[str, float] = {}
+    for rank, r in enumerate(faiss_results):
+        cid = r.get("chunk_id", "")
+        if cid:
+            rrf_scores[cid] = rrf_scores.get(cid, 0.0) + 1.0 / (rrf_k + rank + 1)
+
+    for rank, r in enumerate(bm25_results):
+        cid = r.get("chunk_id", "")
+        if cid:
+            rrf_scores[cid] = rrf_scores.get(cid, 0.0) + 1.0 / (rrf_k + rank + 1)
+
+    # Sort by RRF score descending, return top-k
+    sorted_ids = sorted(rrf_scores, key=rrf_scores.__getitem__, reverse=True)[:top_k]
+    evidence = []
+    for cid in sorted_ids:
+        meta = chunk_meta.get(cid, {})
+        evidence.append({
+            "chunk_id": cid,
+            "citation": meta.get("citation", cid),
+            "text": meta.get("text", ""),
+            "source_type": meta.get("source_type", ""),
+            "similarity": meta.get("similarity", 0.0),   # cosine score from FAISS
+            "bm25_score": meta.get("bm25_score", 0.0),   # BM25 score (0 if only in FAISS)
+            "rrf_score": round(rrf_scores[cid], 6),
+        })
+
+    return {"evidence": evidence, "verified": True, "reason": None}
+
+
 
 
 def get_stats() -> dict:

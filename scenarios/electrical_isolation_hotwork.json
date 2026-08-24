@@ -1,0 +1,134 @@
+{
+  "scenario_id": "scn-electrical-hotwork-001",
+  "name": "Hydraulic Bay — Hot Work During Electrical Isolation",
+  "description": "An electrical isolation permit and a hot-work permit are simultaneously active in the Hydraulic Press Bay during press maintenance. This is an arc flash hazard: hot-work should NOT proceed while electrical isolation is in effect. Meanwhile a low-level gas leak from the adjacent Gas Storage zone is detected propagating through corridors. Workers in the Hydraulic Bay have incomplete PPE. Tests HE-PERMIT-CONFLICT (hot_work + electrical_isolation pair).",
+  "factory_id": "00000000-0000-0000-0000-000000000003",
+  "safety_threshold": 0.10,
+  "zones": [
+    {
+      "zone_id": "zone-cnc",
+      "name": "CNC Machining Floor",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 150.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 0.9
+    },
+    {
+      "zone_id": "zone-hyd",
+      "name": "Hydraulic Press Bay",
+      "hazard_class": "high_risk",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-gas",
+      "name": "Gas Storage / Chemical Zone",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 50.0,
+      "ventilation_status": "degraded",
+      "ventilation_flow_ratio": 0.45
+    },
+    {
+      "zone_id": "zone-ppe",
+      "name": "PPE Checkpoint",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-ctrl",
+      "name": "Control Room",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-break",
+      "name": "Break Room",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 250.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-entry",
+      "name": "Main Entrance / Exit",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 250.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    }
+  ],
+  "zone_adjacency": [
+    {"zone_a": "zone-cnc", "zone_b": "zone-hyd", "medium": "shared_wall"},
+    {"zone_a": "zone-cnc", "zone_b": "zone-ppe", "medium": "ventilation_duct"},
+    {"zone_a": "zone-gas", "zone_b": "zone-ppe", "medium": "ventilation_duct"},
+    {"zone_a": "zone-gas", "zone_b": "zone-cnc", "medium": "ventilation_duct"},
+    {"zone_a": "zone-hyd", "zone_b": "zone-ctrl", "medium": "shared_utility"},
+    {"zone_a": "zone-ppe", "zone_b": "zone-ctrl", "medium": "shared_wall"},
+    {"zone_a": "zone-ctrl", "zone_b": "zone-break", "medium": "shared_wall"},
+    {"zone_a": "zone-ctrl", "zone_b": "zone-entry", "medium": "shared_wall"},
+    {"zone_a": "zone-break", "zone_b": "zone-entry", "medium": "shared_wall"}
+  ],
+  "assets": [
+    {"asset_id": "PRESS-HYD-01", "zone_id": "zone-hyd", "asset_type": "hydraulic_press", "condition": "nominal", "failure_probability": 0.08},
+    {"asset_id": "TANK-GAS-01", "zone_id": "zone-gas", "asset_type": "gas_cylinder", "condition": "degraded", "failure_probability": 0.65}
+  ],
+  "sensors": [
+    {"sensor_id": "GS-HYD-A", "zone_id": "zone-hyd", "modality": "gas", "unit": "ppm"},
+    {"sensor_id": "GS-HYD-B", "zone_id": "zone-hyd", "modality": "gas", "unit": "ppm"},
+    {"sensor_id": "GS-GAS-A", "zone_id": "zone-gas", "modality": "gas", "unit": "ppm"}
+  ],
+  "gas_readings": [
+    {
+      "sensor_id": "GS-GAS-A", "zone_id": "zone-gas", "gas_type": "chlorine",
+      "concentration_ppm": 30.0, "severity": 0.35, "confidence": 0.88, "offset_seconds": 0
+    },
+    {
+      "sensor_id": "GS-GAS-A", "zone_id": "zone-gas", "gas_type": "chlorine",
+      "concentration_ppm": 62.0, "severity": 0.72, "confidence": 0.93, "offset_seconds": 180
+    },
+    {
+      "sensor_id": "GS-HYD-A", "zone_id": "zone-hyd", "gas_type": "chlorine",
+      "concentration_ppm": 5.0, "severity": 0.05, "confidence": 0.70, "offset_seconds": 300
+    }
+  ],
+  "machine_readings": [
+    {
+      "asset_id": "PRESS-HYD-01", "zone_id": "zone-hyd",
+      "Type": "L",
+      "Air_temperature": 55.0,
+      "Process_temperature": 82.0,
+      "Rotational_speed": 0,
+      "Torque": 0.0,
+      "Tool_wear": 0,
+      "offset_seconds": 60
+    }
+  ],
+  "hydraulic_readings": [],
+  "workers": [
+    {"worker_id": "W-HYD-01", "zone_id": "zone-hyd", "present": true, "missing_ppe": ["insulating_gloves", "safety_glasses"]},
+    {"worker_id": "W-HYD-02", "zone_id": "zone-hyd", "present": true, "missing_ppe": []},
+    {"worker_id": "W-GAS-01", "zone_id": "zone-gas", "present": true, "missing_ppe": ["gas_mask"]},
+    {"worker_id": "W-CTRL-01", "zone_id": "zone-ctrl", "present": true, "missing_ppe": []}
+  ],
+  "permits": [
+    {"permit_id": "PTW-HYD-HW-001", "zone_id": "zone-hyd", "permit_type": "hot_work", "status": "active", "worker_id": "W-HYD-01"},
+    {"permit_id": "PTW-HYD-EI-001", "zone_id": "zone-hyd", "permit_type": "electrical_isolation", "status": "active", "worker_id": "W-HYD-02"}
+  ],
+  "events": [],
+  "metadata": {
+    "shift": "dayshift",
+    "author": "CausalCut Test Suite",
+    "test_target": "HE-PERMIT-CONFLICT (hot_work + electrical_isolation pair)",
+    "expected_rules": ["HE-PERMIT-CONFLICT", "HE-GAS-THRESHOLD-BREACH", "HE-PPE-IN-HAZARD-ZONE"],
+    "expected_cut": [
+      "Suspend PTW-HYD-HW-001 (hot_work incompatible with electrical_isolation)",
+      "Evacuate W-GAS-01 from Gas Storage (no gas_mask, chlorine rising)",
+      "Investigate gas source at TANK-GAS-01"
+    ]
+  }
+}

@@ -29,7 +29,9 @@ from typing import Any
 from fastapi import Request
 
 from app.db.repositories import (
+    EventRepository,
     PermitRepository,
+    ScenarioRepository,
     SensorTelemetryRepository,
     WorkerZoneRepository,
 )
@@ -87,6 +89,8 @@ class AgentToolkit:
         self._permits = PermitRepository(db)
         self._workers = WorkerZoneRepository(db)
         self._telemetry = SensorTelemetryRepository(db)
+        self._scenarios = ScenarioRepository(db)
+        self._events = EventRepository(db)
 
     # ------------------------------------------------------------ state --
     def list_zones(self) -> dict[str, Any]:
@@ -310,6 +314,52 @@ class AgentToolkit:
         ok, first_bad = self._audit.verify_chain()
         return {"chain_valid": ok, "first_bad_seq": first_bad, "records": self._audit.tail(limit)}
 
+    # ------------------------------------------------ scenario history --
+    async def get_scenario_history(self, factory_id: str | None = None, limit: int = 20) -> dict[str, Any]:
+        """List past scenario definitions stored in the database.
+
+        Survives server restarts — reads from Supabase, not in-memory.
+        """
+        scenarios = await self._scenarios.list_scenarios(factory_id=factory_id, limit=limit)
+        return {"scenarios": scenarios, "count": len(scenarios)}
+
+    async def get_scenario_runs(self, factory_id: str | None = None,
+                                scenario_id: str | None = None,
+                                limit: int = 20) -> dict[str, Any]:
+        """List past scenario run results from the database.
+
+        Each entry includes run_id, status, execution_mode, residual_risk,
+        processed_events, failure_reason, and timestamps.  Survives restarts.
+        """
+        runs = await self._scenarios.list_runs(
+            factory_id=factory_id, scenario_id=scenario_id, limit=limit,
+        )
+        return {"runs": runs, "count": len(runs)}
+
+    async def get_scenario_run_detail(self, run_id: str) -> dict[str, Any]:
+        """Fetch the full result of a specific scenario run from the database.
+
+        Includes recommendation, causal_paths, activated_rules, pipeline
+        metadata, and models_ran.  Survives server restarts.
+        """
+        row = await self._scenarios.get_run(run_id)
+        if row is None:
+            return {"error": "not_found", "run_id": run_id}
+        return {"run": row}
+
+    async def get_recent_events(self, limit: int = 20,
+                                zone_id: str | None = None,
+                                event_type: str | None = None) -> dict[str, Any]:
+        """List recent safety events from the persistent event store.
+
+        Each event has event_type, zone_id, severity, value, information_class,
+        and timestamp.  Survives server restarts.
+        """
+        events = await self._events.list_recent(
+            limit=limit, zone_id=zone_id, event_type=event_type,
+        )
+        return {"events": events, "count": len(events)}
+
     # ------------------------------------------------------ risk priors --
     def get_osha_prior(self, hazard_type: str) -> dict[str, Any]:
         """Historical OSHA base rate + severity weight for a hazard type,
@@ -430,6 +480,65 @@ TOOL_DECLARATIONS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {"limit": {"type": "integer", "description": "How many records (default 10)"}},
+        },
+    },
+    {
+        "name": "get_scenario_history",
+        "description": (
+            "List past scenario definitions stored in the database (survives server restarts). "
+            "Use this when the operator asks about past/previous scenarios."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "factory_id": {"type": "string", "description": "Optional filter by factory"},
+                "limit": {"type": "integer", "description": "Max results (default 20)"},
+            },
+        },
+    },
+    {
+        "name": "get_scenario_runs",
+        "description": (
+            "List past scenario run results from the database (survives server restarts). "
+            "Includes run_id, status, execution_mode, residual_risk, failure_reason and timestamps. "
+            "Use this when the operator asks about past events, previous runs, or execution history."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "factory_id": {"type": "string", "description": "Optional filter by factory"},
+                "scenario_id": {"type": "string", "description": "Optional filter by scenario"},
+                "limit": {"type": "integer", "description": "Max results (default 20)"},
+            },
+        },
+    },
+    {
+        "name": "get_scenario_run_detail",
+        "description": (
+            "Fetch the full result of a specific scenario run from the database, including "
+            "recommendation, causal_paths, activated_rules, and pipeline metadata. "
+            "Use after get_scenario_runs to drill into a specific run."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"run_id": {"type": "string", "description": "The run ID to fetch"}},
+            "required": ["run_id"],
+        },
+    },
+    {
+        "name": "get_recent_events",
+        "description": (
+            "List recent safety events (sensor readings, worker detections, permit changes, "
+            "model predictions) from the persistent event store. Survives server restarts. "
+            "Use this when the operator asks about recent or past safety events."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Max results (default 20)"},
+                "zone_id": {"type": "string", "description": "Optional filter by zone"},
+                "event_type": {"type": "string", "description": "Optional filter by event type"},
+            },
         },
     },
     {

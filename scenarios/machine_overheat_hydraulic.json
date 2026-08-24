@@ -1,0 +1,173 @@
+{
+  "scenario_id": "scn-machine-hydraulic-001",
+  "name": "CNC + Hydraulic Bay — Machine Overheat and Hydraulic System Degradation",
+  "description": "CNC-03 (already degraded) is showing dangerously high process temperature, elevated torque, and critical tool wear. Simultaneously the hydraulic press PRESS-HYD-01 is experiencing pressure cycling and declining cooling efficiency. A maintenance permit is active on the CNC floor but the machines are still running. One worker on the CNC floor is missing a face shield near the overheating machine. Tests the AI4I machine failure model and hydraulic classifier together.",
+  "factory_id": "00000000-0000-0000-0000-000000000003",
+  "safety_threshold": 0.15,
+  "zones": [
+    {
+      "zone_id": "zone-cnc",
+      "name": "CNC Machining Floor",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 150.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 0.9
+    },
+    {
+      "zone_id": "zone-hyd",
+      "name": "Hydraulic Press Bay",
+      "hazard_class": "high_risk",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-gas",
+      "name": "Gas Storage / Chemical Zone",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 50.0,
+      "ventilation_status": "degraded",
+      "ventilation_flow_ratio": 0.3
+    },
+    {
+      "zone_id": "zone-ppe",
+      "name": "PPE Checkpoint",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-ctrl",
+      "name": "Control Room",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-break",
+      "name": "Break Room",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 250.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-entry",
+      "name": "Main Entrance / Exit",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 250.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    }
+  ],
+  "zone_adjacency": [
+    {"zone_a": "zone-cnc", "zone_b": "zone-hyd", "medium": "shared_wall"},
+    {"zone_a": "zone-cnc", "zone_b": "zone-ppe", "medium": "ventilation_duct"},
+    {"zone_a": "zone-gas", "zone_b": "zone-ppe", "medium": "ventilation_duct"},
+    {"zone_a": "zone-gas", "zone_b": "zone-cnc", "medium": "ventilation_duct"},
+    {"zone_a": "zone-hyd", "zone_b": "zone-ctrl", "medium": "shared_utility"},
+    {"zone_a": "zone-ppe", "zone_b": "zone-ctrl", "medium": "shared_wall"},
+    {"zone_a": "zone-ctrl", "zone_b": "zone-break", "medium": "shared_wall"},
+    {"zone_a": "zone-ctrl", "zone_b": "zone-entry", "medium": "shared_wall"},
+    {"zone_a": "zone-break", "zone_b": "zone-entry", "medium": "shared_wall"}
+  ],
+  "assets": [
+    {"asset_id": "CNC-01", "zone_id": "zone-cnc", "asset_type": "cnc_machine", "condition": "nominal", "failure_probability": 0.05},
+    {"asset_id": "CNC-03", "zone_id": "zone-cnc", "asset_type": "cnc_machine", "condition": "degraded", "failure_probability": 0.22},
+    {"asset_id": "PRESS-HYD-01", "zone_id": "zone-hyd", "asset_type": "hydraulic_press", "condition": "nominal", "failure_probability": 0.08}
+  ],
+  "sensors": [
+    {"sensor_id": "GS-CNC-A", "zone_id": "zone-cnc", "modality": "gas", "unit": "ppm"},
+    {"sensor_id": "GS-HYD-A", "zone_id": "zone-hyd", "modality": "gas", "unit": "ppm"}
+  ],
+  "gas_readings": [
+    {
+      "sensor_id": "GS-CNC-A", "zone_id": "zone-cnc", "gas_type": "carbon_monoxide",
+      "concentration_ppm": 12.0, "severity": 0.08, "confidence": 0.85, "offset_seconds": 60
+    },
+    {
+      "sensor_id": "GS-HYD-A", "zone_id": "zone-hyd", "gas_type": "carbon_monoxide",
+      "concentration_ppm": 8.0, "severity": 0.05, "confidence": 0.80, "offset_seconds": 90
+    }
+  ],
+  "machine_readings": [
+    {
+      "asset_id": "CNC-03", "zone_id": "zone-cnc",
+      "Type": "H",
+      "Air_temperature": 78.5,
+      "Process_temperature": 148.0,
+      "Rotational_speed": 1680,
+      "Torque": 63.5,
+      "Tool_wear": 225,
+      "offset_seconds": 30
+    },
+    {
+      "asset_id": "CNC-03", "zone_id": "zone-cnc",
+      "Type": "H",
+      "Air_temperature": 81.0,
+      "Process_temperature": 155.0,
+      "Rotational_speed": 1650,
+      "Torque": 67.0,
+      "Tool_wear": 230,
+      "offset_seconds": 150
+    },
+    {
+      "asset_id": "CNC-01", "zone_id": "zone-cnc",
+      "Type": "M",
+      "Air_temperature": 65.0,
+      "Process_temperature": 105.0,
+      "Rotational_speed": 1500,
+      "Torque": 40.0,
+      "Tool_wear": 80,
+      "offset_seconds": 60
+    }
+  ],
+  "hydraulic_readings": [
+    {
+      "zone_id": "zone-hyd",
+      "sensor_data": {
+        "PS1": [160.5, 161.2, 159.8, 162.0, 158.5, 163.1, 157.2, 164.8, 155.0, 166.5],
+        "PS2": [100.1, 100.5, 99.8, 101.2, 98.5, 102.0, 97.3, 103.5, 96.0, 104.8],
+        "PS3": [2500.0, 2510.5, 2495.0, 2520.0, 2480.0, 2535.0, 2465.0, 2550.0, 2445.0, 2570.0],
+        "PS4": [120.0, 121.5, 118.5, 123.0, 117.0, 125.0, 115.0, 127.5, 112.0, 130.0],
+        "PS5": [53.2, 53.5, 52.8, 54.0, 52.5, 54.5, 52.0, 55.2, 51.5, 55.8],
+        "PS6": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        "EPS1": [2400.0, 2395.0, 2388.0, 2380.0, 2370.0, 2355.0, 2340.0, 2320.0, 2300.0, 2275.0],
+        "FS1": [10.2, 10.1, 10.0, 9.8, 9.5, 9.2, 8.8, 8.3, 7.8, 7.2],
+        "FS2": [8.6, 8.5, 8.4, 8.2, 8.0, 7.7, 7.4, 7.0, 6.5, 6.0],
+        "TS1": [45.5, 46.0, 46.5, 47.0, 47.8, 48.5, 49.2, 50.0, 51.0, 52.0],
+        "TS2": [42.0, 42.3, 42.8, 43.2, 43.8, 44.5, 45.0, 45.8, 46.5, 47.5],
+        "TS3": [40.0, 40.0, 40.2, 40.5, 40.8, 41.0, 41.2, 41.5, 41.8, 42.0],
+        "TS4": [52.2, 52.8, 53.5, 54.2, 55.0, 55.8, 56.5, 57.5, 58.5, 59.5],
+        "VS1": [0.005, 0.008, 0.012, 0.018, 0.025, 0.035, 0.048, 0.065, 0.085, 0.110],
+        "CE": [28.0, 27.8, 27.5, 27.0, 26.5, 25.8, 25.0, 24.0, 23.0, 21.8],
+        "CP": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        "SE": [2375.0, 2370.0, 2360.0, 2350.0, 2335.0, 2315.0, 2295.0, 2270.0, 2240.0, 2205.0]
+      },
+      "offset_seconds": 60
+    }
+  ],
+  "workers": [
+    {"worker_id": "W-CNC-01", "zone_id": "zone-cnc", "present": true, "missing_ppe": ["face_shield"]},
+    {"worker_id": "W-CNC-02", "zone_id": "zone-cnc", "present": true, "missing_ppe": []},
+    {"worker_id": "W-HYD-01", "zone_id": "zone-hyd", "present": true, "missing_ppe": []}
+  ],
+  "permits": [
+    {"permit_id": "PTW-CNC-MAINT-001", "zone_id": "zone-cnc", "permit_type": "maintenance", "status": "active", "worker_id": "W-CNC-01"}
+  ],
+  "events": [],
+  "metadata": {
+    "shift": "dayshift",
+    "author": "CausalCut Test Suite",
+    "test_target": "AI4I machine failure model + hydraulic classifier",
+    "expected_models": ["machine_failure_xgb", "hydraulic_classifier"],
+    "expected_rules": ["HE-ASSET-DEGRADATION"],
+    "expected_cut": [
+      "Emergency shutdown CNC-03 (overheating + high tool wear)",
+      "Inspect PRESS-HYD-01 hydraulics (cooling efficiency declining)",
+      "Evacuate W-CNC-01 (face_shield missing near overheating machine)"
+    ]
+  }
+}

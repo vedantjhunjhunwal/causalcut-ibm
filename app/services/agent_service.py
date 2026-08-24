@@ -1,34 +1,35 @@
-"""CausalCut Safety Intelligence agent — Gemini function-calling loop.
+"""CausalCut Safety Intelligence agent — Gemini / Groq function-calling loop.
 
-SDK note: this targets ``google-genai`` (``from google import genai``), the
-current unified SDK. The older ``google-generativeai`` package is fully
+SDK note: the Gemini path targets ``google-genai`` (``from google import genai``),
+the current unified SDK. The older ``google-generativeai`` package is fully
 deprecated upstream (no further updates/bug fixes) — don't switch back to it.
+
+The Groq path uses the ``groq`` SDK (OpenAI-compatible), which supports native
+tool-calling for Llama 3.x, Mixtral, and Gemma models.
+
+Provider selection
+------------------
+Set ``CAUSALCUT_AGENT_LLM_PROVIDER=groq`` (and ``CAUSALCUT_GROQ_API_KEY``) to
+use Groq instead of Gemini. Both paths implement the same ReAct tool-calling
+loop against the same ``AgentToolkit``.
 
 Model cascade
 --------------
-The agent maintains a prioritised list of **non-deprecated** Gemini models
-(``GEMINI_MODEL_CASCADE``). On each LLM call, it tries the configured model
-first; if that returns a 404 (model not found / removed), 429 (rate-limit /
-quota exhausted), or any 5xx server error, it automatically retries with the
-next model in the cascade. This keeps the agent functional even when:
-
-  - a model has been deprecated or shut down since the last deploy,
-  - the API key's quota is exhausted on one model tier, or
-  - a transient Gemini outage affects one model but not another.
-
-The cascade is updated to reflect the current Gemini 3.x production lineup.
-Deprecated 2.x models are explicitly excluded.
+Both providers maintain a prioritised cascade of models (``GEMINI_MODEL_CASCADE``
+/ ``GROQ_MODEL_CASCADE``). On each LLM call, the configured model is tried
+first; retriable errors (404/429/5xx) fall back to the next model in the
+cascade.
 
 Architecture (ReAct-style, two-pass)
 --------------------------------------
-1. Pass 1: the operator's message + conversation history go to Gemini along
-   with the tool schema from ``app.engine.agent_tools``. Gemini either
+1. Pass 1: the operator’s message + conversation history go to the LLM along
+   with the tool schema from ``app.engine.agent_tools``. The model either
    answers directly, or returns one or more function calls.
 2. Each function call is checked against ``ALLOWED_TOOL_NAMES`` (whitelist
    enforcement — nothing off that list executes no matter what the model
    asks for), executed against the real ``AgentToolkit``, and the JSON
    result is sent back as a function response.
-3. Pass 2: Gemini synthesises the tool result(s) into operator-facing prose.
+3. Pass 2: the model synthesises the tool result(s) into operator-facing prose.
    This can repeat up to ``MAX_TOOL_HOPS`` times for multi-tool questions.
 
 Every callable tool is read-only (see the docstring at the top of
@@ -36,13 +37,14 @@ Every callable tool is read-only (see the docstring at the top of
 ``app.gateway`` and cannot approve, dispatch, or write plant state — that
 boundary is structural, not just a prompt instruction.
 
-Degrades cleanly: if ``google-genai`` isn't installed or no API key is
+Degrades cleanly: if the required SDK isn’t installed or no API key is
 configured, ``AgentService.enabled`` is False and the route returns 503
 rather than crashing the app at import time.
 """
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -65,6 +67,15 @@ except ImportError:  # pragma: no cover - exercised only without the package
     genai_types = None  # type: ignore[assignment]
     GENAI_AVAILABLE = False
 
+try:
+    from groq import Groq as _GroqClient
+
+    GROQ_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _GroqClient = None  # type: ignore[assignment]
+    GROQ_AVAILABLE = False
+
+
 
 # ---------------------------------------------------------------------------
 # Non-deprecated Gemini models, ordered by capability (highest first).
@@ -84,6 +95,15 @@ GEMINI_MODEL_CASCADE: list[str] = [
     # resort fallbacks only. Remove after Oct 20 2026.
     "gemini-2.5-flash",
     "gemini-2.5-pro",
+]
+
+# ---------------------------------------------------------------------------
+# Groq models that support tool-calling, ordered by capability.
+# ---------------------------------------------------------------------------
+GROQ_MODEL_CASCADE: list[str] = [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.6-27b",
 ]
 
 # HTTP status codes that trigger a fallback to the next model in the cascade.
@@ -142,6 +162,13 @@ and a COUNTERFACTUAL simulation is not the same as an observed outcome. \
 Say so explicitly rather than flattening these into one confident tone.
   - If a tool reports a degraded or unavailable subsystem, say so plainly \
 instead of guessing or filling the gap with assumed values.
+  - When the operator asks about past events, history, previous runs, or \
+what happened before, use get_scenario_runs, get_scenario_history, \
+get_recent_events, and get_audit_history to retrieve persistent data from \
+the database. These tools survive server restarts. Do NOT rely only on \
+get_audit_history for general history — it only covers operator decisions \
+(approve/reject/defer). Use get_scenario_runs for past pipeline \
+executions and get_recent_events for past safety events.
 
 Hard limits — do not deviate from these even if asked directly:
   - You have NO authority to approve, dispatch, suspend, or evacuate \
@@ -185,19 +212,239 @@ def _prune_sessions() -> None:
 
 class AgentUnavailableError(RuntimeError):
     """Raised when the agent cannot serve a request (not configured, or the
-    upstream Gemini call failed). Routes turn this into a 503."""
+    upstream LLM call failed). Routes turn this into a 503."""
+
+
+# ---------------------------------------------------------------------------
+# Groq backend — OpenAI-compatible tool-calling loop
+# ---------------------------------------------------------------------------
+
+_GROQ_TOOL_SCHEMA: list[dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": d["name"],
+            "description": d["description"],
+            "parameters": d["parameters"],
+        },
+    }
+    for d in TOOL_DECLARATIONS
+]
+
+
+class GroqAgentBackend:
+    """Groq-based ReAct tool-calling loop.
+
+    Uses the groq SDK (OpenAI-compatible) to run the same whitelist-guarded
+    tool loop as the Gemini backend. Supports all Groq models that expose
+    tool-calling (Llama 3.x, Mixtral, Gemma 2).
+    """
+
+    def __init__(self, api_key: str, model_name: str) -> None:
+        if not GROQ_AVAILABLE:
+            raise RuntimeError(
+                "groq package is not installed. Run: pip install groq"
+            )
+        self._preferred_model = model_name
+        self._cascade = self._build_cascade(model_name)
+        keys = [k.strip() for k in api_key.split(",") if k.strip()]
+        self._clients: list[Any] = []
+        for k in keys:
+            try:
+                self._clients.append(_GroqClient(api_key=k))
+            except Exception as exc:
+                log.warning("failed to initialise Groq client for a key: %s", exc)
+        if not self._clients:
+            raise RuntimeError("No valid Groq API keys found.")
+
+    @staticmethod
+    def _build_cascade(preferred: str) -> list[str]:
+        cascade = [preferred]
+        for m in GROQ_MODEL_CASCADE:
+            if m != preferred:
+                cascade.append(m)
+        return cascade
+
+    @property
+    def model_cascade(self) -> list[str]:
+        return list(self._cascade)
+
+    async def chat(
+        self,
+        request: Request,
+        message: str,
+        session_id: str,
+        session: "_ChatSession",
+    ) -> dict[str, Any]:
+        """Run the ReAct loop via Groq and return the standard reply dict."""
+        toolkit = AgentToolkit(request)
+        tool_calls_made: list[dict[str, Any]] = []
+
+        # Build conversation history in OpenAI message format
+        messages: list[dict] = [
+            {"role": "system", "content": SYSTEM_INSTRUCTION},
+        ]
+        for turn in session.history[-(_SESSION_MAX_TURNS * 2):]:
+            oai_role = "assistant" if turn.role == "model" else turn.role
+            messages.append({"role": oai_role, "content": turn.text})
+        messages.append({"role": "user", "content": message})
+
+        active_model = self._preferred_model
+        errors: list[tuple[str, Exception]] = []
+
+        # Pass 1 — initial call with model cascade
+        response = None
+        for client in self._clients:
+            for model_name in self._cascade:
+                try:
+                    response = client.chat.completions.create(
+                        model=model_name,
+                        messages=messages,
+                        tools=_GROQ_TOOL_SCHEMA,
+                        tool_choice="auto",
+                    )
+                    active_model = model_name
+                    break
+                except Exception as exc:
+                    if _is_retriable_error(exc):
+                        log.warning(
+                            "groq model unavailable, trying next in cascade",
+                            extra={"model": model_name, "error": str(exc), "session_id": session_id},
+                        )
+                        errors.append((model_name, exc))
+                        continue
+                    errors.append((model_name, exc))
+                    break
+            if response is not None:
+                break
+
+        if response is None:
+            error_summary = "; ".join(f"{m}: {e}" for m, e in errors)
+            raise AgentUnavailableError(f"All Groq models/keys exhausted. Errors: {error_summary}")
+
+        # Tool loop
+        for _hop in range(MAX_TOOL_HOPS):
+            choice = response.choices[0]
+            if choice.finish_reason != "tool_calls" or not choice.message.tool_calls:
+                break
+
+            # Append the assistant message with tool_calls
+            messages.append({
+                "role": "assistant",
+                "content": choice.message.content or "",
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                    }
+                    for tc in choice.message.tool_calls
+                ],
+            })
+
+            for tc in choice.message.tool_calls:
+                name = tc.function.name
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+
+                if name not in ALLOWED_TOOL_NAMES:
+                    log.warning("groq agent requested disallowed tool", extra={"tool": name, "session_id": session_id})
+                    tool_result: Any = {"error": "tool_not_allowed", "tool": name}
+                else:
+                    try:
+                        method = getattr(toolkit, name)
+                        result = method(**args)
+                        if hasattr(result, "__await__"):
+                            result = await result
+                        tool_result = result
+                    except Exception as exc:
+                        log.warning(
+                            "groq agent tool call raised",
+                            extra={"tool": name, "tool_args": args, "error": str(exc), "session_id": session_id},
+                        )
+                        tool_result = {"error": "tool_execution_failed", "tool": name, "detail": str(exc)}
+
+                tool_calls_made.append({"name": name, "args": args})
+                log.info("groq_agent_tool_call", extra={"tool": name, "tool_args": args, "session_id": session_id})
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": json.dumps(tool_result, default=str),
+                })
+
+            # Follow-up call with tool results
+            try:
+                response = self._clients[0].chat.completions.create(
+                    model=active_model,
+                    messages=messages,
+                    tools=_GROQ_TOOL_SCHEMA,
+                    tool_choice="auto",
+                )
+            except Exception as exc:
+                raise AgentUnavailableError(f"Groq follow-up call failed ({active_model}): {exc}") from exc
+
+        reply_text = (
+            response.choices[0].message.content
+            or "I wasn't able to generate a response for that — please try rephrasing."
+        )
+        return {
+            "reply": reply_text,
+            "tool_calls": tool_calls_made,
+            "session_id": session_id,
+            "model_used": active_model,
+        }
 
 
 class AgentService:
-    def __init__(self, api_key: str | None, model_name: str) -> None:
+    def __init__(
+        self,
+        api_key: str | None,
+        model_name: str,
+        provider: str = "gemini",
+        groq_api_key: str | None = None,
+    ) -> None:
+        self._provider = provider
         self._preferred_model = model_name
+        self._groq_backend: GroqAgentBackend | None = None
+
+        if provider == "groq":
+            effective_key = groq_api_key or api_key
+            self._enabled = bool(effective_key) and GROQ_AVAILABLE
+            self._clients: list[Any] = []
+            self._config: Any = None
+            if self._enabled and effective_key:
+                try:
+                    self._groq_backend = GroqAgentBackend(effective_key, model_name)
+                    self._model_cascade = self._groq_backend.model_cascade
+                except Exception as exc:
+                    log.warning("failed to initialise Groq agent backend: %s", exc)
+                    self._enabled = False
+                    self._model_cascade = [model_name]
+            else:
+                self._model_cascade = [model_name]
+            return
+
+        # Gemini path (default)
         self._enabled = bool(api_key) and GENAI_AVAILABLE
-        self._client: Any = None
+        self._clients: list[Any] = []
         self._config: Any = None
         self._model_cascade = self._build_cascade(model_name)
-        if self._enabled:
+        if self._enabled and api_key:
+            keys = [k.strip() for k in api_key.split(",") if k.strip()]
+            for k in keys:
+                try:
+                    self._clients.append(genai.Client(api_key=k))
+                except Exception as e:
+                    log.warning("failed to initialise Gemini client for a key: %s", e)
+
+            if not self._clients:
+                self._enabled = False
+                return
+
             try:
-                self._client = genai.Client(api_key=api_key)
                 tool = genai_types.Tool(
                     function_declarations=[
                         genai_types.FunctionDeclaration(
@@ -211,7 +458,7 @@ class AgentService:
                     tools=[tool],
                 )
             except Exception as exc:  # pragma: no cover - bad key/model name
-                log.error("failed to initialise Gemini client", extra={"error": str(exc)})
+                log.error("failed to configure Gemini schemas", extra={"error": str(exc)})
                 self._enabled = False
 
     @staticmethod
@@ -247,9 +494,9 @@ class AgentService:
         msg = str(exc).lower()
         return "function response" in msg and ("function call" in msg or "invalid_argument" in msg)
 
-    def _create_chat(self, model_name: str, history: list) -> Any:
+    def _create_chat(self, client: Any, model_name: str, history: list) -> Any:
         """Create a chat session with the given model name."""
-        return self._client.chats.create(
+        return client.chats.create(
             model=model_name, config=self._config, history=history
         )
 
@@ -263,56 +510,56 @@ class AgentService:
         """
         errors: list[tuple[str, Exception]] = []
 
-        for model_name in self._model_cascade:
-            try:
-                chat = self._create_chat(model_name, history)
-                response = chat.send_message(message)
+        for client in self._clients:
+            for model_name in self._model_cascade:
+                try:
+                    chat = self._create_chat(client, model_name, history)
+                    response = chat.send_message(message)
 
-                if errors:
-                    # We fell back — log which models failed
-                    failed_models = [m for m, _ in errors]
-                    log.info(
-                        "agent model fallback succeeded",
-                        extra={
-                            "active_model": model_name,
-                            "failed_models": failed_models,
-                            "session_id": session_id,
-                        },
-                    )
+                    if errors:
+                        # We fell back — log which models failed
+                        failed_models = [m for m, _ in errors]
+                        log.info(
+                            "agent model fallback succeeded",
+                            extra={
+                                "active_model": model_name,
+                                "failed_models": failed_models,
+                                "session_id": session_id,
+                            },
+                        )
 
-                return response, chat, model_name
+                    return response, chat, model_name
 
-            except Exception as exc:
-                if _is_retriable_error(exc):
-                    log.warning(
-                        "agent model unavailable, trying next in cascade",
-                        extra={
-                            "model": model_name,
-                            "error": str(exc),
-                            "session_id": session_id,
-                        },
-                    )
-                    errors.append((model_name, exc))
-                    continue
-                else:
-                    # Non-retriable error (auth failure, malformed request, etc.)
-                    # — don't retry, it'll fail on every model.
-                    log.warning(
-                        "agent request failed with non-retriable error",
-                        extra={
-                            "model": model_name,
-                            "error": str(exc),
-                            "session_id": session_id,
-                        },
-                    )
-                    raise AgentUnavailableError(
-                        f"Agent request failed ({model_name}): {exc}"
-                    ) from exc
+                except Exception as exc:
+                    if _is_retriable_error(exc):
+                        log.warning(
+                            "agent model unavailable, trying next in cascade",
+                            extra={
+                                "model": model_name,
+                                "error": str(exc),
+                                "session_id": session_id,
+                            },
+                        )
+                        errors.append((model_name, exc))
+                        continue
+                    else:
+                        # Non-retriable error (auth failure, malformed request, etc.)
+                        # — don't retry on this client for this model, but maybe other clients?
+                        log.warning(
+                            "agent request failed with non-retriable error",
+                            extra={
+                                "model": model_name,
+                                "error": str(exc),
+                                "session_id": session_id,
+                            },
+                        )
+                        errors.append((model_name, exc))
+                        break # break the model loop, try the next client
 
-        # All models in cascade exhausted
+        # All models/clients exhausted
         error_summary = "; ".join(f"{m}: {e}" for m, e in errors)
         raise AgentUnavailableError(
-            f"All models in cascade exhausted. Errors: {error_summary}"
+            f"All models and keys exhausted. Errors: {error_summary}"
         )
 
     def _send_followup_with_fallback(
@@ -329,10 +576,6 @@ class AgentService:
         rebuilds the chat from the remaining models in the cascade.
         """
         # Capture the chat's accumulated history BEFORE the attempt.
-        # This includes the full current exchange (user message, model
-        # function calls, prior function responses, etc.) — unlike the
-        # `history` parameter which is the stale session history from
-        # before this request started.
         accumulated_history = list(getattr(chat, "history", None) or history)
 
         try:
@@ -355,33 +598,35 @@ class AgentService:
             )
 
         # Current model failed — try the rest of the cascade from scratch.
-        # We can't continue the chat object since it's tied to the failed model,
-        # so we rebuild with the ACCUMULATED history (not the stale session
-        # history) and re-send the tool results as a new message.
-        remaining = [m for m in self._model_cascade if m != current_model]
+        # We rebuild with the ACCUMULATED history and re-send the tool results as a new message.
         errors: list[tuple[str, Exception]] = [(current_model, _first_exc)]
 
-        for model_name in remaining:
-            try:
-                new_chat = self._create_chat(model_name, accumulated_history)
-                response = new_chat.send_message(message)
-                failed_models = [m for m, _ in errors]
-                log.info(
-                    "agent follow-up fallback succeeded",
-                    extra={
-                        "active_model": model_name,
-                        "failed_models": failed_models,
-                        "session_id": session_id,
-                    },
-                )
-                return response, new_chat, model_name
-            except Exception as fallback_exc:
-                if _is_retriable_error(fallback_exc) or self._is_history_ordering_error(fallback_exc):
-                    errors.append((model_name, fallback_exc))
+        for client in self._clients:
+            for model_name in self._model_cascade:
+                # Try to avoid immediately re-trying the exact same failed combination if we can identify it.
+                # However, chat._client isn't exposed properly in all genai SDK versions, so this is best-effort.
+                if getattr(chat, "_client", None) == client and model_name == current_model:
                     continue
-                raise AgentUnavailableError(
-                    f"Agent synthesis failed ({model_name}): {fallback_exc}"
-                ) from fallback_exc
+                    
+                try:
+                    new_chat = self._create_chat(client, model_name, accumulated_history)
+                    response = new_chat.send_message(message)
+                    failed_models = [m for m, _ in errors]
+                    log.info(
+                        "agent follow-up fallback succeeded",
+                        extra={
+                            "active_model": model_name,
+                            "failed_models": failed_models,
+                            "session_id": session_id,
+                        },
+                    )
+                    return response, new_chat, model_name
+                except Exception as fallback_exc:
+                    if _is_retriable_error(fallback_exc) or self._is_history_ordering_error(fallback_exc):
+                        errors.append((model_name, fallback_exc))
+                        continue
+                    errors.append((model_name, fallback_exc))
+                    break
 
         error_summary = "; ".join(f"{m}: {e}" for m, e in errors)
         raise AgentUnavailableError(
@@ -389,15 +634,32 @@ class AgentService:
         )
 
     async def chat(self, request: Request, message: str, session_id: str | None) -> dict[str, Any]:
-        if not self._enabled or self._client is None:
-            raise AgentUnavailableError(
-                "Agent not configured: set CAUSALCUT_GEMINI_API_KEY and install google-genai."
+        if not self._enabled:
+            provider_hint = (
+                "set CAUSALCUT_GROQ_API_KEY and install groq"
+                if self._provider == "groq"
+                else "set CAUSALCUT_GEMINI_API_KEY and install google-genai"
             )
+            raise AgentUnavailableError(f"Agent not configured: {provider_hint}.")
 
         _prune_sessions()
         sid = session_id or str(uuid.uuid4())
         session = _SESSIONS.setdefault(sid, _ChatSession())
         session.last_used = time.time()
+
+        # --- Groq path ---
+        if self._provider == "groq" and self._groq_backend is not None:
+            result = await self._groq_backend.chat(request, message, sid, session)
+            session.history.append(_ChatTurn(role="user", text=message))
+            session.history.append(_ChatTurn(role="model", text=result["reply"]))
+            session.history = session.history[-(_SESSION_MAX_TURNS * 2):]
+            return result
+
+        # --- Gemini path ---
+        if not getattr(self, "_clients", None):
+            raise AgentUnavailableError(
+                "Agent not configured: set CAUSALCUT_GEMINI_API_KEY and install google-genai."
+            )
 
         toolkit = AgentToolkit(request)
         tool_calls_made: list[dict[str, Any]] = []
@@ -471,13 +733,18 @@ _agent_service: AgentService | None = None
 _agent_service_key: tuple[str | None, str] | None = None
 
 
-def get_agent_service(api_key: str | None, model_name: str) -> AgentService:
-    """Singleton, re-created only if key/model actually change (mainly for
+def get_agent_service(
+    api_key: str | None,
+    model_name: str,
+    provider: str = "gemini",
+    groq_api_key: str | None = None,
+) -> AgentService:
+    """Singleton, re-created only if key/model/provider actually change (mainly for
     tests that flip settings between cases)."""
     global _agent_service, _agent_service_key
-    key = (api_key, model_name)
+    key = (api_key, model_name, provider, groq_api_key)
     if _agent_service is None or _agent_service_key != key:
-        _agent_service = AgentService(api_key, model_name)
+        _agent_service = AgentService(api_key, model_name, provider=provider, groq_api_key=groq_api_key)
         _agent_service_key = key
     return _agent_service
 

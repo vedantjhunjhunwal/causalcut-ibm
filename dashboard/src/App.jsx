@@ -15,8 +15,9 @@ import ApprovalsView from "./components/views/ApprovalsView";
 import ModelsView from "./components/views/ModelsView";
 import SettingsView from "./components/views/SettingsView";
 import AiAgentView from "./components/views/AiAgentView";
+import ScenarioHistoryView from "./components/views/ScenarioHistoryView";
 import ChatDrawer from "./components/ChatDrawer";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Database } from "lucide-react";
 import { EMPTY_SCENARIO } from "./components/ScenarioBuilder";
 import { useAuth } from "./context/AuthContext";
 import { supabase } from "./lib/supabase";
@@ -55,6 +56,7 @@ export default function App() {
   const [deciding, setDeciding] = useState(false);
   const [online, setOnline] = useState(null);
   const [wsState, setWsState] = useState("idle");
+  const [lastRunAt, setLastRunAt] = useState(null); // timestamp of last completed run
   const socketRef = useRef(null);
 
   // ── Load factory zones, sensors & blueprint from Supabase on mount ──────
@@ -224,6 +226,7 @@ export default function App() {
       setCorrelationId(data.result?.correlation_id || `trace-${Date.now()}`);
       setResult(data.result);
       setPhase("done");
+      setLastRunAt(Date.now()); // record when this run finished
       return null;
     } catch (e) {
       clearInterval(stageInterval);
@@ -252,6 +255,21 @@ export default function App() {
     setScenario({ ...EMPTY_SCENARIO });
   };
 
+  // Load a historical run from the DB into the current simulation view
+  const loadHistoricalRun = useCallback(async (runData) => {
+    if (!runData) return;
+    // runData is the full DB row: { run_id, result, scenario_id, status, ... }
+    const historicalResult = runData.result ?? runData;
+    const historicalRunId = runData.run_id ?? runData.run_id;
+    setResult(historicalResult);
+    setRunId(historicalRunId ?? null);
+    setCorrelationId(historicalResult?.correlation_id ?? null);
+    setPhase("done");
+    setDecision(null);
+    setFailure(null);
+    setLastRunAt(runData.completed_at ? new Date(runData.completed_at).getTime() : null);
+  }, []);
+
   const failedStage = failure?.stage || (phase === "error" ? latestStage?.stage : null);
 
   const renderActiveView = () => {
@@ -265,6 +283,8 @@ export default function App() {
             onRun={runScenario}
             busy={phase === "running"}
             onSelectIntervention={(id) => setSelectedInterventionId(id)}
+            runId={runId}
+            lastRunAt={lastRunAt}
           />
         );
       case "plant-state":
@@ -279,6 +299,13 @@ export default function App() {
             scenario={scenario}
             result={result}
             onNavigate={setActiveTab}
+          />
+        );
+      case "history":
+        return (
+          <ScenarioHistoryView
+            onNavigate={setActiveTab}
+            onLoadHistoricalRun={loadHistoricalRun}
           />
         );
       case "simulation":
@@ -308,7 +335,14 @@ export default function App() {
       case "live-events":
         return <LiveEventsView scenario={scenario} />;
       case "approvals":
-        return <ApprovalsView scenario={scenario} result={result} onNavigate={setActiveTab} />;
+        return (
+          <ApprovalsView
+            scenario={scenario}
+            result={result}
+            runId={runId}
+            onNavigate={setActiveTab}
+          />
+        );
       case "audit-log":
         return <AuditLogView />;
       case "models":

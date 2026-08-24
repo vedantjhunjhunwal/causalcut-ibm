@@ -171,7 +171,7 @@ class Permit(BaseModel):
     model_config = ConfigDict(extra="forbid")
     permit_id: str = _ID
     zone_id: ZoneIdStr
-    permit_type: str = "hot_work"
+    permit_type: str = "hot_work"  # hot_work | confined_space_entry | electrical_isolation | maintenance | general
     status: Literal["active", "suspended", "closed", "expired"] = "active"
     worker_id: str | None = None
 

@@ -74,3 +74,22 @@ RETRIEVAL_TOP_K = 5                 # Section 4.9: "top-5 relevant chunks"
 RETRIEVAL_TIMEOUT_SECONDS = 1.0     # Section 4.9 latency target is <1s end-to-end;
                                      # Appendix A: "[FAISS] query timeout -> proceed
                                      # without regulatory evidence, flag unverified"
+
+# -------------------------------------------------------------------------- #
+# BM25 hybrid search (Q10)
+# -------------------------------------------------------------------------- #
+# Tokenized corpus sidecar for BM25Okapi. Stored alongside the FAISS index
+# so both indexes are always in sync (ingest_document updates both atomically).
+BM25_CORPUS_FILE = os.path.join(FAISS_INDEX_DIR, "bm25_corpus.json")
+
+# BM25 Okapi parameters (standard defaults from Robertson & Sparck Jones 1994)
+BM25_K1: float = 1.5    # term frequency saturation
+BM25_B: float = 0.75    # document length normalization
+
+# Reciprocal Rank Fusion constant (Cormack, Clarke & Buettcher 2009)
+RRF_K: int = 60
+
+# Retrieval mode: "hybrid" (BM25 + FAISS fused via RRF), "semantic" (FAISS only),
+# "keyword" (BM25 only). Override via RETRIEVAL_MODE env var.
+RETRIEVAL_MODE: str = os.getenv("RETRIEVAL_MODE", "hybrid")
+

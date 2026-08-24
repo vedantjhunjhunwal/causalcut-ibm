@@ -18,3 +18,7 @@ runs/
 .DS_Store
 .models/
 causalcut_*.svg
+
+ls.py
+scratch/
+{factory_id}')

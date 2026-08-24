@@ -3,7 +3,26 @@
 export const API = import.meta.env.VITE_API_BASE ?? "http://localhost:8000/api/v1";
 export const DEV_API_KEY = import.meta.env.VITE_OPERATOR_KEY ?? "dev-key-so-a";
 
-async function json(res) {
+const _stringify = (v) => {
+  if (v == null) return null;
+  if (typeof v === "string") return v;
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+};
+
+const envelope = async (res) => {
+  if (res.status === 204) return { ok: true, status: 204, body: null };
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    // Always return {ok: false, status, body} — never throw.
+    // Callers get a consistent shape and can inspect status/body.error
+    // without wrapping every call in try/catch.
+    return { ok: false, status: res.status, body };
+  }
+  return { ok: true, status: res.status, body };
+};
+
+const json = async (res) => {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error(body?.detail || body?.error || `${res.status} ${res.statusText}`);
@@ -12,38 +31,52 @@ async function json(res) {
     throw err;
   }
   return body;
-}
-
-async function envelope(res) {
-  const body = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, body };
-}
+};
 
 export const api = {
+  baseUrl: API,
   // Scenario & Simulation
   template: () => fetch(`${API}/scenario/template`).then(json),
   samples: () => fetch(`${API}/scenario/samples`).then(json),
-  sample: (name) => fetch(`${API}/scenario/sample/${name}`).then(json),
-  validate: (scenario) =>
-    fetch(`${API}/scenario/validate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(scenario),
-    }).then(json),
-  start: (scenario) =>
-    fetch(`${API}/scenario/start`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(scenario),
-    }).then(envelope),
-  runStatus: (runId) => fetch(`${API}/scenario/runs/${runId}`).then(json),
-  getRun: (runId) => fetch(`${API}/scenario/${runId}`).then(json),
-  getGraph: (runId) => fetch(`${API}/scenario/${runId}/graph`).then(json),
+  getRun: (runId) => fetch(`${API}/scenario/${runId}`).then(envelope),
+  getRunFromDb: (runId) => fetch(`${API}/scenario/db/${runId}`).then(envelope),
   decide: (runId, decision, reason) =>
     fetch(`${API}/scenario/${runId}/decision`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-API-Key": DEV_API_KEY },
       body: JSON.stringify({ decision, reason }),
+    }).then(envelope),
+  scenarioHistory: (limit = 50) => fetch(`${API}/scenario/history/runs?limit=${limit}`).then(envelope),
+  loadRunFromDb: (runId) => fetch(`${API}/scenario/db/${runId}`).then(envelope),
+  submitAlternative: (runId, payload) =>
+    fetch(`${API}/scenario/${runId}/alternative`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": DEV_API_KEY },
+      body: JSON.stringify(payload),
+    }).then(envelope),
+  //
+  // Knowledge Graph & Regulatory
+  //
+  queryGraph: (query) =>
+    fetch(`${API}/graphify/query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, top_k: 5 }),
+    }).then(envelope),
+  queryRegulatory: (query) =>
+    fetch(`${API}/regulatory/query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    }).then(envelope),
+  //
+  // Risk & Audit
+  //
+  approveRecommendation: (decision, reason, recommendationId = "current") =>
+    fetch(`${API}/risk/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": DEV_API_KEY },
+      body: JSON.stringify({ decision, reason, recommendation_id: recommendationId }),
     }).then(envelope),
 
   // Plant State

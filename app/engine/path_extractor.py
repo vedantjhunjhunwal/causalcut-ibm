@@ -88,7 +88,19 @@ _PATHWAY_DECOMPOSITION: dict[str, list[SubPathway]] = {
     "ventilation_starvation": [
         SubPathway("ventilation_deficit", frozenset({"ventilation_deficit"})),
     ],
+    # HE-PERMIT-CONFLICT: trapped worker with active ignition source (hot work)
+    # and limited egress (confined space entry). Both factors must hold.
+    "trapped_worker_ignition": [
+        SubPathway("confined_space_ignition", frozenset({"permit_conflict", "worker_exposure"})),
+        SubPathway("ignition_while_confined", frozenset({"permit_conflict", "ignition_source"})),
+    ],
+    # HE-PERMIT-CONDITIONS-VIOLATED: active hot-work permit while gas is above threshold.
+    # The permit itself is the ignition source; gas is the fuel source.
+    "permit_conditions_violated": [
+        SubPathway("conditions_violated", frozenset({"ignition_source", "gas_source"})),
+    ],
 }
+
 
 
 @dataclass
@@ -148,6 +160,11 @@ class AccidentPath:
 # optimiser can reason about coverage independent of node naming.
 def _factor_of(condition_predicate: str) -> str:
     p = condition_predicate.lower()
+    # Check specific multi-word permit predicates first, before generic 'gas' or 'permit' matches.
+    if "conflicting permits" in p:
+        return "permit_conflict"
+    if "conditions violated" in p or "hot_work permit" in p:
+        return "ignition_source"
     if "gas_ppm" in p or "gas" in p:
         return "gas_source"
     if "hot_work" in p or "permit" in p:
@@ -163,6 +180,7 @@ def _factor_of(condition_predicate: str) -> str:
     if "failure_probability" in p or "asset" in p:
         return "equipment_hazard"
     return "other"
+
 
 
 class PathExtractor:
@@ -282,6 +300,39 @@ class PathExtractor:
                     cost_category="LOW", disruption="MINIMAL", execution_time_min=2,
                     breaks_factors=frozenset({"ignition_source"}),
                 ))
+
+        # Suspend the confined-space-entry permit -> resolves permit conflict.
+        # Priority: suspend confined space (not hot work) because confined space
+        # entry cannot be safely continued once an ignition hazard is present.
+        if "permit_conflict" in fset:
+            confined_permits = [
+                p for p in self.graph.active_permits_in_zone(zone_id)
+                if self.graph.node(p).get("permit_type") == "confined_space_entry"
+            ]
+            hw_permits = [
+                p for p in self.graph.active_permits_in_zone(zone_id)
+                if self.graph.node(p).get("permit_type") == "hot_work"
+            ]
+            for target in confined_permits:
+                cands.append(CandidateIntervention(
+                    intervention_id=f"INT-suspend-cse-{target}",
+                    action=f"Suspend confined-space-entry permit {target} and safely extract worker from {zone_id}",
+                    target_node=target,
+                    intervention_type="suspend_permit",
+                    cost_category="LOW", disruption="LOW", execution_time_min=5,
+                    breaks_factors=frozenset({"permit_conflict", "worker_exposure"}),
+                ))
+            for target in hw_permits:
+                cands.append(CandidateIntervention(
+                    intervention_id=f"INT-suspend-hw-conflict-{target}",
+                    action=f"Suspend hot-work permit {target} to resolve permit conflict in {zone_id}",
+                    target_node=target,
+                    intervention_type="suspend_permit",
+                    cost_category="LOW", disruption="MINIMAL", execution_time_min=2,
+                    breaks_factors=frozenset({"permit_conflict", "ignition_source"}),
+                ))
+
+
 
         # Evacuate exposed workers -> removes worker exposure (only for workers actually present).
         if "worker_exposure" in fset:

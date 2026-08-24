@@ -1,0 +1,148 @@
+{
+  "scenario_id": "scn-cascading-gas-001",
+  "name": "Cascading Chlorine Leak — Gas Zone to CNC Floor via PPE Checkpoint",
+  "description": "Chlorine leak from degraded TANK-GAS-01 in the Gas Storage zone propagates through the ventilation duct to the PPE Checkpoint and onward to the CNC Machining Floor. Gas readings show temporal escalation with a 2-minute propagation delay across zones. Ventilation is failed in the origin zone. Tests multi-zone gas propagation across the real factory topology, temporal ramp, and cross-zone worker evacuation priority.",
+  "factory_id": "00000000-0000-0000-0000-000000000003",
+  "safety_threshold": 0.15,
+  "zones": [
+    {
+      "zone_id": "zone-cnc",
+      "name": "CNC Machining Floor",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 150.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 0.9
+    },
+    {
+      "zone_id": "zone-hyd",
+      "name": "Hydraulic Press Bay",
+      "hazard_class": "high_risk",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-gas",
+      "name": "Gas Storage / Chemical Zone",
+      "hazard_class": "gas_hazard",
+      "baseline_gas_threshold_ppm": 50.0,
+      "ventilation_status": "failed",
+      "ventilation_flow_ratio": 0.05
+    },
+    {
+      "zone_id": "zone-ppe",
+      "name": "PPE Checkpoint",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-ctrl",
+      "name": "Control Room",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 200.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-break",
+      "name": "Break Room",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 250.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    },
+    {
+      "zone_id": "zone-entry",
+      "name": "Main Entrance / Exit",
+      "hazard_class": "standard",
+      "baseline_gas_threshold_ppm": 250.0,
+      "ventilation_status": "nominal",
+      "ventilation_flow_ratio": 1.0
+    }
+  ],
+  "zone_adjacency": [
+    {"zone_a": "zone-cnc", "zone_b": "zone-hyd", "medium": "shared_wall"},
+    {"zone_a": "zone-cnc", "zone_b": "zone-ppe", "medium": "ventilation_duct"},
+    {"zone_a": "zone-gas", "zone_b": "zone-ppe", "medium": "ventilation_duct"},
+    {"zone_a": "zone-gas", "zone_b": "zone-cnc", "medium": "ventilation_duct"},
+    {"zone_a": "zone-hyd", "zone_b": "zone-ctrl", "medium": "shared_utility"},
+    {"zone_a": "zone-ppe", "zone_b": "zone-ctrl", "medium": "shared_wall"},
+    {"zone_a": "zone-ctrl", "zone_b": "zone-break", "medium": "shared_wall"},
+    {"zone_a": "zone-ctrl", "zone_b": "zone-entry", "medium": "shared_wall"},
+    {"zone_a": "zone-break", "zone_b": "zone-entry", "medium": "shared_wall"}
+  ],
+  "assets": [
+    {"asset_id": "TANK-GAS-01", "zone_id": "zone-gas", "asset_type": "gas_cylinder", "condition": "degraded", "failure_probability": 0.65},
+    {"asset_id": "TANK-GAS-02", "zone_id": "zone-gas", "asset_type": "gas_cylinder", "condition": "nominal", "failure_probability": 0.10},
+    {"asset_id": "CNC-01", "zone_id": "zone-cnc", "asset_type": "cnc_machine", "condition": "nominal", "failure_probability": 0.05}
+  ],
+  "sensors": [
+    {"sensor_id": "GS-GAS-A", "zone_id": "zone-gas", "modality": "gas", "unit": "ppm"},
+    {"sensor_id": "GS-GAS-B", "zone_id": "zone-gas", "modality": "gas", "unit": "ppm"},
+    {"sensor_id": "GS-PPE-A", "zone_id": "zone-ppe", "modality": "gas", "unit": "ppm"},
+    {"sensor_id": "GS-CNC-A", "zone_id": "zone-cnc", "modality": "gas", "unit": "ppm"},
+    {"sensor_id": "GS-CNC-B", "zone_id": "zone-cnc", "modality": "gas", "unit": "ppm"}
+  ],
+  "gas_readings": [
+    {
+      "sensor_id": "GS-GAS-A", "zone_id": "zone-gas", "gas_type": "chlorine",
+      "concentration_ppm": 15.0, "severity": 0.20, "confidence": 0.88, "offset_seconds": 0
+    },
+    {
+      "sensor_id": "GS-GAS-A", "zone_id": "zone-gas", "gas_type": "chlorine",
+      "concentration_ppm": 42.0, "severity": 0.62, "confidence": 0.93, "offset_seconds": 120
+    },
+    {
+      "sensor_id": "GS-GAS-B", "zone_id": "zone-gas", "gas_type": "chlorine",
+      "concentration_ppm": 40.0, "severity": 0.60, "confidence": 0.90, "offset_seconds": 130
+    },
+    {
+      "sensor_id": "GS-GAS-A", "zone_id": "zone-gas", "gas_type": "chlorine",
+      "concentration_ppm": 85.0, "severity": 0.85, "confidence": 0.96, "offset_seconds": 240
+    },
+    {
+      "sensor_id": "GS-PPE-A", "zone_id": "zone-ppe", "gas_type": "chlorine",
+      "concentration_ppm": 18.0, "severity": 0.15, "confidence": 0.80, "offset_seconds": 260
+    },
+    {
+      "sensor_id": "GS-CNC-A", "zone_id": "zone-cnc", "gas_type": "chlorine",
+      "concentration_ppm": 10.0, "severity": 0.08, "confidence": 0.75, "offset_seconds": 320
+    },
+    {
+      "sensor_id": "GS-PPE-A", "zone_id": "zone-ppe", "gas_type": "chlorine",
+      "concentration_ppm": 45.0, "severity": 0.55, "confidence": 0.88, "offset_seconds": 360
+    },
+    {
+      "sensor_id": "GS-CNC-A", "zone_id": "zone-cnc", "gas_type": "chlorine",
+      "concentration_ppm": 30.0, "severity": 0.30, "confidence": 0.82, "offset_seconds": 420
+    }
+  ],
+  "machine_readings": [],
+  "hydraulic_readings": [],
+  "workers": [
+    {"worker_id": "W-GAS-01", "zone_id": "zone-gas", "present": true, "missing_ppe": ["gas_mask", "chemical_gloves"]},
+    {"worker_id": "W-GAS-02", "zone_id": "zone-gas", "present": true, "missing_ppe": []},
+    {"worker_id": "W-CNC-01", "zone_id": "zone-cnc", "present": true, "missing_ppe": ["hard_hat"]},
+    {"worker_id": "W-CNC-02", "zone_id": "zone-cnc", "present": true, "missing_ppe": ["gas_mask"]},
+    {"worker_id": "W-PPE-01", "zone_id": "zone-ppe", "present": true, "missing_ppe": []},
+    {"worker_id": "W-CTRL-01", "zone_id": "zone-ctrl", "present": true, "missing_ppe": []}
+  ],
+  "permits": [
+    {"permit_id": "PTW-GAS-MAINT-001", "zone_id": "zone-gas", "permit_type": "maintenance", "status": "active", "worker_id": "W-GAS-01"}
+  ],
+  "events": [],
+  "metadata": {
+    "shift": "morning",
+    "author": "CausalCut Test Suite",
+    "test_target": "Multi-zone gas propagation across factory topology",
+    "expected_rules": ["HE-GAS-THRESHOLD-BREACH", "HE-PPE-IN-HAZARD-ZONE", "HE-VENTILATION-COMPROMISED"],
+    "expected_cut": [
+      "Evacuate zone-gas immediately (ventilation failed + 85 ppm chlorine)",
+      "Evacuate W-GAS-01 (no gas_mask, no chemical gloves)",
+      "Evacuate W-CNC-02 from CNC floor (no gas_mask, gas propagating)",
+      "Emergency ventilation restore in zone-gas"
+    ]
+  }
+}

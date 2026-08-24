@@ -144,6 +144,7 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_zone_time   ON sensor_telemetry (zone_i
 -- Fast "current value of every sensor" lookup for the Plant-State Store.
 CREATE TABLE IF NOT EXISTS sensor_latest (
     sensor_id     TEXT PRIMARY KEY,
+    factory_id    TEXT,
     zone_id       TEXT NOT NULL,
     sensor_kind   TEXT NOT NULL,
     reading_time  TEXT NOT NULL,
@@ -184,6 +185,50 @@ CREATE TABLE IF NOT EXISTS zone_state (
 );
 
 -- ---------------------------------------------------------------------
+-- SCENARIOS — persisted scenario definitions [S]
+-- Stores the full JSON submitted by the operator so any run can be
+-- replayed, audited, or compared against future runs.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS scenarios (
+    scenario_id   TEXT PRIMARY KEY,                     -- from Scenario.scenario_id
+    factory_id    TEXT NOT NULL,
+    name          TEXT NOT NULL,
+    description   TEXT NOT NULL DEFAULT '',
+    payload_json  TEXT NOT NULL,                        -- full Scenario JSON (immutable)
+    created_at    TEXT NOT NULL,
+    information_class TEXT NOT NULL DEFAULT 'S'
+);
+CREATE INDEX IF NOT EXISTS idx_scenarios_factory ON scenarios (factory_id, created_at DESC);
+
+-- ---------------------------------------------------------------------
+-- SCENARIO RUNS — one row per execution of a scenario [P]
+-- Stores the pipeline output: activated rules, causal paths,
+-- recommendation, residual risk, and audit linkage.
+-- A single scenario_id can have many runs (re-runs, what-if comparisons).
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS scenario_runs (
+    run_id            TEXT PRIMARY KEY,                 -- "run-{hex10}"
+    scenario_id       TEXT NOT NULL REFERENCES scenarios(scenario_id),
+    factory_id        TEXT NOT NULL,
+    correlation_id    TEXT NOT NULL,
+    status            TEXT NOT NULL CHECK (status IN ('completed','failed','running')),
+    execution_mode    TEXT,                             -- 'real' | 'mock' | 'degraded'
+    activated_rules   TEXT NOT NULL DEFAULT '[]',       -- JSON array of rule template_ids
+    causal_paths      TEXT NOT NULL DEFAULT '[]',       -- JSON array (serialized AccidentPath)
+    recommendation    TEXT,                             -- JSON object (CutRecommendation) or NULL
+    residual_risk     REAL,                             -- extracted from recommendation for fast query
+    processed_events  INTEGER NOT NULL DEFAULT 0,
+    models_ran        TEXT,                             -- JSON array of model names
+    failure_reason    TEXT,                             -- NULL on success
+    pipeline_json     TEXT,                             -- full pipeline metadata JSON
+    created_at        TEXT NOT NULL,
+    completed_at      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_scenario_runs_scenario ON scenario_runs (scenario_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_scenario_runs_factory  ON scenario_runs (factory_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_scenario_runs_status   ON scenario_runs (status, created_at DESC);
+
+-- ---------------------------------------------------------------------
 -- SCHEMA VERSIONING
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -192,3 +237,5 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 );
 INSERT OR IGNORE INTO schema_migrations (version, applied_at)
 VALUES ('1.0.0', datetime('now'));
+INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+VALUES ('1.1.0-scenario-persistence', datetime('now'));

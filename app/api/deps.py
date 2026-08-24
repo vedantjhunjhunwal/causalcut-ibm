@@ -11,6 +11,7 @@ from app.core.exceptions import UnauthorizedError
 from app.db.repositories import (
     EventRepository,
     PermitRepository,
+    ScenarioRepository,
     SensorTelemetryRepository,
     WorkerZoneRepository,
 )
@@ -58,7 +59,12 @@ def get_telemetry_repo(db: DbDep) -> SensorTelemetryRepository:
     return SensorTelemetryRepository(db)
 
 
+def get_scenario_repo(db: DbDep) -> ScenarioRepository:
+    return ScenarioRepository(db)
+
+
 EventRepoDep = Annotated[EventRepository, Depends(get_event_repo)]
 PermitRepoDep = Annotated[PermitRepository, Depends(get_permit_repo)]
 WorkerRepoDep = Annotated[WorkerZoneRepository, Depends(get_worker_repo)]
 TelemetryRepoDep = Annotated[SensorTelemetryRepository, Depends(get_telemetry_repo)]
+ScenarioRepoDep = Annotated[ScenarioRepository, Depends(get_scenario_repo)]

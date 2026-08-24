@@ -431,3 +431,213 @@ class SensorTelemetryRepository:
             res = self.db.client.table('sensor_latest').update({'stale': 1}).lt('reading_time', cutoff_iso).eq('stale', 0).execute()
             return len(res.data)
         return await _supabase_call(_exec)
+
+
+class ScenarioRepository:
+    """Persist scenario definitions and their run results.
+
+    Two tables:
+    - ``scenarios`` — immutable definition (the input JSON). One row per
+      scenario_id. Re-running the same scenario_id reuses this row.
+    - ``scenario_runs`` — one row per execution (run_id). A single scenario
+      may have many runs (reruns, what-if comparisons).
+
+    Both writes are best-effort: a Supabase outage should not prevent the
+    pipeline from returning its result to the operator. Callers must handle
+    None returns gracefully.
+    """
+
+    def __init__(self, db: Database) -> None:
+        self.db = db
+
+    async def upsert_scenario(
+        self,
+        scenario_id: str,
+        factory_id: str,
+        name: str,
+        description: str,
+        payload_json: str,
+        created_at: str,
+    ) -> bool:
+        """Insert the scenario definition (no-op if scenario_id already exists).
+
+        Returns True if the row was inserted/updated, False on any error.
+        Failures are caught and logged at WARNING level so a DB error never
+        aborts a pipeline run, but the caller MUST check the return value and
+        log its own warning if it chooses to continue.
+        """
+        def _exec() -> bool:
+            try:
+                self.db.client.table("scenarios").upsert({
+                    "scenario_id": scenario_id,
+                    "factory_id": factory_id,
+                    "name": name,
+                    "description": description or "",
+                    "payload_json": payload_json,
+                    "created_at": created_at,
+                    "information_class": "S",
+                }, on_conflict="scenario_id").execute()
+                return True
+            except Exception as exc:
+                log.warning(
+                    "ScenarioRepository.upsert_scenario DB error",
+                    extra={
+                        "scenario_id": scenario_id,
+                        "factory_id": factory_id,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc)[:500],
+                    },
+                )
+                return False
+
+        try:
+            return await _supabase_call(_exec)
+        except Exception as exc:
+            log.warning(
+                "ScenarioRepository.upsert_scenario transport error",
+                extra={
+                    "scenario_id": scenario_id,
+                    "error_type": type(exc).__name__,
+                    "error": str(exc)[:500],
+                },
+            )
+            return False
+
+    async def upsert_run(
+        self,
+        run_id: str,
+        scenario_id: str,
+        factory_id: str,
+        correlation_id: str,
+        status: str,
+        result: dict,
+    ) -> bool:
+        """Insert or update a scenario run row.
+
+        Called twice per run by the route:
+        1. status='running' at the start (provides run_id immediately).
+        2. status='completed'|'failed' at the end with the full result.
+
+        Returns True on success, False on any failure (non-blocking).
+        """
+        now = _now()
+        rec = result.get("recommendation") or {}
+
+        def _exec() -> bool:
+            try:
+                pipeline = result.get("pipeline", {})
+                data = {
+                    "run_id": run_id,
+                    "scenario_id": scenario_id,
+                    "factory_id": factory_id,
+                    "correlation_id": correlation_id,
+                    "status": status,
+                    "execution_mode": result.get("execution_mode"),
+                    "activated_rules": json.dumps(
+                        [r if isinstance(r, str) else r.get("template_id", str(r))
+                         for r in result.get("activated_rules", [])],
+                        default=str,
+                    ),
+                    "causal_paths": json.dumps(
+                        result.get("causal_paths", []), default=str
+                    ),
+                    "recommendation": json.dumps(rec, default=str) if rec else None,
+                    "residual_risk": rec.get("residual_risk") if isinstance(rec, dict) else None,
+                    "processed_events": pipeline.get("processed_events", 0),
+                    "models_ran": json.dumps(
+                        result.get("models", {}).get("models_ran") or [], default=str
+                    ),
+                    "failure_reason": result.get("failure_reason"),
+                    "pipeline_json": json.dumps(pipeline, default=str),
+                    "created_at": now,
+                    "completed_at": now if status in ("completed", "failed") else None,
+                }
+                self.db.client.table("scenario_runs").upsert(
+                    data, on_conflict="run_id"
+                ).execute()
+                return True
+            except Exception as exc:
+                log.warning(
+                    "ScenarioRepository.upsert_run DB error",
+                    extra={
+                        "run_id": run_id,
+                        "scenario_id": scenario_id,
+                        "status": status,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc)[:500],
+                    },
+                )
+                return False
+
+        try:
+            return await _supabase_call(_exec)
+        except Exception as exc:
+            log.warning("ScenarioRepository.upsert_run transport error: %s", exc)
+            return False
+
+    async def list_runs(
+        self,
+        factory_id: str | None = None,
+        scenario_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """List recent scenario runs, newest first."""
+        def _exec() -> list[dict]:
+            q = self.db.client.table("scenario_runs").select(
+                "run_id, scenario_id, factory_id, correlation_id, status, "
+                "execution_mode, residual_risk, processed_events, "
+                "failure_reason, created_at, completed_at"
+            )
+            if factory_id:
+                q = q.eq("factory_id", factory_id)
+            if scenario_id:
+                q = q.eq("scenario_id", scenario_id)
+            res = q.order("created_at", desc=True).limit(limit).execute()
+            return res.data
+        try:
+            return await _supabase_call(_exec)
+        except Exception as exc:
+            log.warning("ScenarioRepository.list_runs failed: %s", exc)
+            return []
+
+    async def get_run(self, run_id: str) -> dict | None:
+        """Fetch the full run record including recommendation and causal paths."""
+        def _exec() -> dict | None:
+            res = self.db.client.table("scenario_runs").select("*").eq("run_id", run_id).execute()
+            if not res.data:
+                return None
+            row = res.data[0]
+            # Deserialise JSON columns for convenience
+            for col in ("activated_rules", "causal_paths", "recommendation", "pipeline_json", "models_ran"):
+                raw = row.get(col)
+                if isinstance(raw, str):
+                    try:
+                        row[col] = json.loads(raw)
+                    except Exception:
+                        pass
+            return row
+        try:
+            return await _supabase_call(_exec)
+        except Exception as exc:
+            log.warning("ScenarioRepository.get_run failed: %s", exc)
+            return None
+
+    async def list_scenarios(
+        self,
+        factory_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """List scenario definitions, newest first (without the full payload_json)."""
+        def _exec() -> list[dict]:
+            q = self.db.client.table("scenarios").select(
+                "scenario_id, factory_id, name, description, created_at"
+            )
+            if factory_id:
+                q = q.eq("factory_id", factory_id)
+            res = q.order("created_at", desc=True).limit(limit).execute()
+            return res.data
+        try:
+            return await _supabase_call(_exec)
+        except Exception as exc:
+            log.warning("ScenarioRepository.list_scenarios failed: %s", exc)
+            return []

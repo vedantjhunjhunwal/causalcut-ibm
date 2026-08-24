@@ -40,20 +40,75 @@ logger = logging.getLogger("causalcut.agents")
 _SEVERITY_THRESHOLD = 0.70   # above this, Agent 1 auto-drafts
 
 # ------------------------------------------------------------------ #
-# Shared Gemini helper
+# Shared LLM helper (Gemini + Groq)
 # ------------------------------------------------------------------ #
+
+def _llm_generate(
+    prompt: str,
+    api_key: str,
+    model: str = "gemini-2.0-flash",
+    provider: str = "gemini",
+    groq_api_key: str | None = None,
+) -> str:
+    """Call the configured LLM provider and return the text response.
+
+    provider="gemini" (default): uses google.generativeai with *api_key*.
+    provider="groq": uses the groq SDK with *groq_api_key* (falls back to
+        *api_key* if groq_api_key is not set, for convenience).
+
+    Returns an error string on failure so callers can surface it gracefully.
+    """
+    if provider == "groq":
+        return _groq_generate(prompt, groq_api_key or api_key, model)
+    return _gemini_generate(prompt, api_key, model)
+
 
 def _gemini_generate(prompt: str, api_key: str, model: str = "gemini-2.0-flash") -> str:
     """Call Gemini and return the text response. Returns an error string on failure."""
     try:
         import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        m = genai.GenerativeModel(model)
-        response = m.generate_content(prompt)
-        return response.text
-    except Exception as exc:
-        logger.warning("gemini call failed: %s", exc)
+    except ImportError as exc:
         return f"[Agent unavailable: {exc}]"
+
+    keys = [k.strip() for k in api_key.split(",") if k.strip()]
+    last_exc = None
+
+    for k in keys:
+        try:
+            genai.configure(api_key=k)
+            m = genai.GenerativeModel(model)
+            response = m.generate_content(prompt)
+            return response.text
+        except Exception as exc:
+            last_exc = exc
+            logger.warning("gemini call failed with a key: %s", exc)
+
+    return f"[Agent unavailable: {last_exc}]"
+
+
+def _groq_generate(prompt: str, api_key: str, model: str = "openai/gpt-oss-120b") -> str:
+    """Call Groq and return the text response. Returns an error string on failure."""
+    try:
+        from groq import Groq
+    except ImportError as exc:
+        return f"[Agent unavailable — groq package not installed: {exc}]"
+
+    keys = [k.strip() for k in api_key.split(",") if k.strip()]
+    last_exc = None
+
+    for k in keys:
+        try:
+            client = Groq(api_key=k)
+            completion = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return completion.choices[0].message.content or ""
+        except Exception as exc:
+            last_exc = exc
+            logger.warning("groq call failed with a key: %s", exc)
+
+    return f"[Agent unavailable: {last_exc}]"
 
 
 # ------------------------------------------------------------------ #
@@ -65,6 +120,8 @@ def draft_emergency_response(
     path_dict: dict[str, Any],
     api_key: str,
     model: str = "gemini-2.0-flash",
+    provider: str = "gemini",
+    groq_api_key: str | None = None,
 ) -> dict[str, Any]:
     """Agent 1: draft emergency response artifacts for a confirmed high-severity cut.
 
@@ -129,7 +186,7 @@ Produce the following as a JSON object with these exact keys:
 Respond ONLY with valid JSON. No markdown, no explanation outside the JSON.
 """
 
-    raw = _gemini_generate(prompt, api_key, model)
+    raw = _llm_generate(prompt, api_key, model, provider=provider, groq_api_key=groq_api_key)
 
     # Try to parse JSON; if it fails, return a structured error that still
     # surfaces the raw text so the operator has something to work with.
@@ -170,6 +227,8 @@ def mine_incident_patterns(
     api_key: str,
     model: str = "gemini-2.0-flash",
     rag_url: str | None = None,
+    provider: str = "gemini",
+    groq_api_key: str | None = None,
 ) -> dict[str, Any]:
     """Agent 2: cross-reference recent AccidentPath history against the incident corpus.
 
@@ -239,7 +298,7 @@ that may warrant a new or updated bow-tie rule definition.
 Return ONLY a JSON object with key "patterns" (list of candidate bow-tie objects).
 """
 
-    raw = _gemini_generate(prompt, api_key, model)
+    raw = _llm_generate(prompt, api_key, model, provider=provider, groq_api_key=groq_api_key)
     try:
         cleaned = raw.strip().lstrip("```json").lstrip("```").rstrip("```")
         result = json.loads(cleaned)
@@ -269,6 +328,8 @@ def run_compliance_scorecard(
     api_key: str,
     model: str = "gemini-2.0-flash",
     rag_url: str | None = None,
+    provider: str = "gemini",
+    groq_api_key: str | None = None,
 ) -> dict[str, Any]:
     """Agent 3: produce a continuous compliance scorecard against plant state.
 
@@ -322,7 +383,7 @@ Also include a "summary" key with overall compliance percentage (satisfied / tot
 Return ONLY valid JSON.
 """
 
-    raw = _gemini_generate(prompt, api_key, model)
+    raw = _llm_generate(prompt, api_key, model, provider=provider, groq_api_key=groq_api_key)
     try:
         cleaned = raw.strip().lstrip("```json").lstrip("```").rstrip("```")
         result = json.loads(cleaned)

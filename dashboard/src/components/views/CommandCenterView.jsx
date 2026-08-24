@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { RefreshCw, ArrowRight, ArrowUp, Activity, Play, ShieldAlert, Check } from "lucide-react";
 import { api } from "../../api";
 import FactoryMapView from "../FactoryMapView";
+
 export default function CommandCenterView({
   scenario,
   result,
@@ -9,9 +10,11 @@ export default function CommandCenterView({
   onRun,
   busy,
   onSelectIntervention,
+  lastRunAt,
+  runId,
 }) {
   const [selectedZoneId, setSelectedZoneId] = useState(null);
-  const [graphMode, setGraphMode] = useState("causal"); // "causal" | "spatial"
+  const [graphMode, setGraphMode] = useState("causal");
   const [refreshing, setRefreshing] = useState(false);
   const [liveEvents, setLiveEvents] = useState([]);
   const [approvedQuick, setApprovedQuick] = useState(false);
@@ -36,19 +39,102 @@ export default function CommandCenterView({
     return () => clearInterval(timer);
   }, []);
 
-  // Compute dynamic stats from active scenario and result
-  const zoneRiskMap = result?.zone_risk || {};
-  const maxRisk = Object.values(zoneRiskMap).length > 0 ? Math.max(...Object.values(zoneRiskMap)) : 0;
+  // ── Fully computed KPI values from live result / scenario ──────────────────
+  const zoneRiskMap = result?.zone_risk ?? {};
+  const zoneRiskValues = Object.values(zoneRiskMap);
+  const maxRisk = zoneRiskValues.length > 0 ? Math.max(...zoneRiskValues) : 0;
+  // Risk index: 0.0 when no run yet, computed from max zone risk otherwise
   const riskIndex = (maxRisk * 10).toFixed(1);
-  const openPathsCount = result?.causal_paths?.length ?? 0;
-  const workersCount = scenario?.workers?.length ?? 0;
-  const sensorsCount = scenario?.sensors?.length ?? 0;
-  const pendingApprovalsCount = result?.recommendation?.interventions?.length ?? 0;
+  const riskIndexTrend = result
+    ? ((maxRisk * 10) - 0).toFixed(1)
+    : null;
 
-  // Active zones for the 2D floorplan
-  const scenarioZones = scenario?.zones?.length
-    ? scenario.zones
+  const openPathsCount = result?.causal_paths?.length ?? 0;
+  const pathsRequiringDecision = openPathsCount; // every unresolved path requires a decision
+
+  // Workers: count workers present in scenario zones
+  const workersInZones = (scenario?.workers ?? []).filter((w) => w.present !== false).length;
+  const restrictedZoneIds = new Set(
+    (scenario?.zones ?? [])
+      .filter((z) => z.hazard_class && z.hazard_class !== "none")
+      .map((z) => z.zone_id)
+  );
+  const workersInRestricted = (scenario?.workers ?? []).filter(
+    (w) => w.present !== false && restrictedZoneIds.has(w.zone_id)
+  ).length;
+
+  // Sensors: compute online ratio from scenario sensors
+  const totalSensors = (scenario?.sensors ?? []).length;
+  // Treat stale gas readings as offline sensors
+  const staleSensorIds = new Set(
+    (scenario?.gas_readings ?? [])
+      .filter((g) => g.stale === true)
+      .map((g) => g.sensor_id)
+  );
+  const onlineSensors = totalSensors - staleSensorIds.size;
+  const sensorPct =
+    totalSensors > 0
+      ? ((onlineSensors / totalSensors) * 100).toFixed(1)
+      : result
+      ? "—" // had a run, just no sensors in scenario
+      : "—";
+
+  // Pending approvals: interventions from the recommendation with no decision
+  const pendingApprovals = result?.recommendation?.interventions?.length ?? 0;
+
+  // Age of the last run
+  const lastRunAgeLabel = (() => {
+    if (!lastRunAt) return "no run yet";
+    const diffMs = Date.now() - lastRunAt;
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffSec = Math.floor((diffMs % 60000) / 1000);
+    if (diffMin === 0) return `${diffSec}s ago`;
+    return `${diffMin}m ${diffSec}s ago`;
+  })();
+
+  // ── Causal network nodes derived from the primary path ─────────────────────
+  const primaryPath = result?.causal_paths?.[0];
+  const dagNodes = primaryPath
+    ? (primaryPath.contributing_factors ?? []).map((factor, i, arr) => ({
+        title: factor.replace(/_/g, " "),
+        likelihood: i === arr.length - 1
+          ? `${(primaryPath.severity ?? 0).toFixed(2)} severity`
+          : `factor ${i + 1}/${arr.length}`,
+        status:
+          i === 0 ? "neutral"
+          : i === arr.length - 1 ? "alert"
+          : i % 2 === 0 ? "active-gold"
+          : "elevated",
+      }))
     : [];
+
+  // Priority action from recommendation
+  const primaryCut = result?.recommendation?.interventions?.[0];
+  const primaryActionTitle = primaryCut?.action ?? "No pending actions";
+  const primaryActionPath = primaryCut?.breaks_factors?.length
+    ? `Interrupts: ${primaryCut.breaks_factors.join(" → ")}`
+    : result ? "System has no active pathway requiring intervention" : "Run a simulation to get recommendations";
+
+  const expectedRiskReduction = (() => {
+    if (!primaryCut || !result?.causal_paths?.[0]) return null;
+    const base = result.causal_paths[0].severity ?? 0.6;
+    const residual = result.recommendation?.residual_risk ?? base;
+    const pct = Math.max(0, Math.round(((base - residual) / (base || 1)) * 100));
+    return `${pct}%`;
+  })();
+
+  const handleQuickApprove = async () => {
+    if (!runId) return;
+    setApprovedQuick(true);
+    try {
+      await api.decide(runId, "APPROVE", `Dispatched from Command Center overview: ${primaryActionTitle}`);
+    } catch (e) {
+      console.warn("Quick approve:", e);
+    }
+  };
+
+  // Active zones for the factory map
+  const scenarioZones = scenario?.zones ?? [];
 
   const floorPositions = [
     { left: "12%", top: "38%", width: "18%", height: "28%" },
@@ -63,60 +149,18 @@ export default function CommandCenterView({
     const risk = zoneRiskMap[z.zone_id] ?? 0;
     const status = risk >= 0.6 ? "alert" : risk >= 0.3 ? "elevated" : "normal";
     const pos = floorPositions[idx % floorPositions.length];
-    return {
-      id: z.zone_id,
-      name: z.name || z.zone_id,
-      risk: (risk * 10).toFixed(1),
-      state: status,
-      ...pos,
-    };
+    return { id: z.zone_id, name: z.name || z.zone_id, risk: (risk * 10).toFixed(1), state: status, ...pos };
   });
 
-  const activeSelectedZone =
-    mapZones.find((z) => z.id === selectedZoneId) || mapZones[2] || mapZones[0] || { name: "No zone", state: "normal", risk: 0, id: "none" };
-
-  // Dynamic Causal Network nodes from result or active path
-  const primaryPath = result?.causal_paths?.[0];
-  const dagNodes = primaryPath
-    ? [
-        { title: "Gas Leak", likelihood: "0.81 likelihood", status: "neutral" },
-        { title: "High Concentration", likelihood: "0.74 likelihood", status: "elevated" },
-        { title: "Ignition Probability", likelihood: "0.62 likelihood", status: "active-gold" },
-        { title: "Worker Exposure", likelihood: "0.40 likelihood", status: "neutral" },
-        { title: "Potential Fire", likelihood: `${(primaryPath.severity || 0.31).toFixed(2)} severity`, status: "alert" },
-      ]
-    : [];
-
-  // Priority action from recommendation
-  const primaryCut = result?.recommendation?.interventions?.[0];
-  const primaryActionTitle = primaryCut ? primaryCut.action : "No pending actions";
-  const primaryActionPath = primaryCut?.breaks_factors?.length
-    ? `Interrupts: ${primaryCut.breaks_factors.join(" → ")}`
-    : "System is operating normally";
-
-  const handleQuickApprove = async () => {
-    setApprovedQuick(true);
-    try {
-      await api.approveRecommendation(
-        "APPROVE",
-        `Dispatched from Command Center overview: ${primaryActionTitle}`
-      );
-    } catch (e) {
-      console.warn("Quick approve:", e);
-    }
-  };
-
-  // Events list merging live API and scenario events
-  const defaultEvents = [];
-
+  // Events list from live API stream
   const displayEvents = liveEvents.length > 0
     ? liveEvents.slice(0, 5).map((ev) => ({
-        time: ev.timestamp ? ev.timestamp.substring(11, 19) : "00:09:41",
+        time: ev.timestamp ? ev.timestamp.substring(11, 19) : "—",
         source: ev.event_type ? ev.event_type.split("_")[0].toUpperCase() : "SENSOR",
-        desc: `${ev.label || ev.event_type} · ${ev.zone_id || "Gas Treatment"}`,
+        desc: `${ev.label || ev.event_type} · ${ev.zone_id || "Plant"}`,
         severity: ev.severity > 0.6 ? "HIGH" : ev.severity > 0.3 ? "MEDIUM" : "LOW",
       }))
-    : defaultEvents;
+    : [];
 
   return (
     <div className="page-canvas">
@@ -143,14 +187,22 @@ export default function CommandCenterView({
         </div>
       </div>
 
-      {/* 5 Top KPI Cards */}
+      {/* 5 Top KPI Cards — all computed from live data */}
       <div className="kpi-grid cols-5">
         <div className="kpi-card accent-orange">
           <div className="kpi-title">PLANT RISK INDEX</div>
-          <div className="kpi-value">{riskIndex} / 10</div>
+          <div className="kpi-value">{result ? `${riskIndex} / 10` : "— / 10"}</div>
           <div className="kpi-subtitle">
-            <ArrowUp size={12} color="#ea580c" />
-            <span>↑ 0.8 since 23:00</span>
+            {riskIndexTrend && parseFloat(riskIndexTrend) > 0 ? (
+              <>
+                <ArrowUp size={12} color="#ea580c" />
+                <span>↑ {riskIndexTrend} since last run</span>
+              </>
+            ) : result ? (
+              <span>↔ from last run</span>
+            ) : (
+              <span>Run simulation to compute</span>
+            )}
           </div>
         </div>
 
@@ -159,27 +211,49 @@ export default function CommandCenterView({
           <div className="kpi-value highlight-orange">
             {openPathsCount < 10 ? `0${openPathsCount}` : openPathsCount}
           </div>
-          <div className="kpi-subtitle">1 requires decision</div>
+          <div className="kpi-subtitle">
+            {pathsRequiringDecision > 0
+              ? `${pathsRequiringDecision} require${pathsRequiringDecision === 1 ? "s" : ""} decision`
+              : result
+              ? "No active paths"
+              : "No run yet"}
+          </div>
         </div>
 
         <div className="kpi-card accent-dark">
           <div className="kpi-title">WORKERS IN ZONES</div>
-          <div className="kpi-value">{workersCount}</div>
-          <div className="kpi-subtitle">6 restricted-area</div>
+          <div className="kpi-value">{workersInZones}</div>
+          <div className="kpi-subtitle">
+            {workersInRestricted > 0
+              ? `${workersInRestricted} in hazard zone${workersInRestricted !== 1 ? "s" : ""}`
+              : workersInZones > 0
+              ? "All in safe zones"
+              : "No workers tracked"}
+          </div>
         </div>
 
         <div className="kpi-card accent-dark">
           <div className="kpi-title">SENSORS REPORTING</div>
-          <div className="kpi-value">98.7%</div>
-          <div className="kpi-subtitle">{sensorsCount} / {sensorsCount + 5} online</div>
+          <div className="kpi-value">
+            {sensorPct !== "—" ? `${sensorPct}%` : "—"}
+          </div>
+          <div className="kpi-subtitle">
+            {totalSensors > 0
+              ? `${onlineSensors} / ${totalSensors} online`
+              : "No sensors in scenario"}
+          </div>
         </div>
 
         <div className="kpi-card accent-amber">
           <div className="kpi-title">PENDING APPROVALS</div>
           <div className="kpi-value highlight-amber">
-            {pendingApprovalsCount < 10 ? `0${pendingApprovalsCount}` : pendingApprovalsCount}
+            {pendingApprovals < 10 ? `0${pendingApprovals}` : pendingApprovals}
           </div>
-          <div className="kpi-subtitle">oldest 06 min</div>
+          <div className="kpi-subtitle">
+            {lastRunAt
+              ? `last run ${lastRunAgeLabel}`
+              : "Run a simulation first"}
+          </div>
         </div>
       </div>
 
@@ -200,9 +274,11 @@ export default function CommandCenterView({
           <div className="panel-header-row">
             <div>
               <span className="panel-title-text">CAUSAL RISK NETWORK</span>
-              <span className="panel-meta-text" style={{ marginLeft: 12 }}>
-                G-204 · PROPAGATION TRACE
-              </span>
+              {primaryPath && (
+                <span className="panel-meta-text" style={{ marginLeft: 12 }}>
+                  {primaryPath.pathway?.replace(/_/g, " ").toUpperCase()} · PROPAGATION TRACE
+                </span>
+              )}
             </div>
             <div className="filter-pills-row" style={{ margin: 0 }}>
               <button
@@ -223,22 +299,30 @@ export default function CommandCenterView({
           </div>
 
           <div className="dag-canvas">
-            <div className="dag-sequence">
-              {dagNodes.map((n, idx) => (
-                <React.Fragment key={idx}>
-                  <div className={`dag-node ${n.status}`}>
-                    <div className="dag-node-title">{n.title}</div>
-                    <div className="dag-node-score">{n.likelihood}</div>
-                  </div>
-                  {idx < dagNodes.length - 1 && <div className="dag-arrow">→</div>}
-                </React.Fragment>
-              ))}
-            </div>
+            {dagNodes.length > 0 ? (
+              <div className="dag-sequence">
+                {dagNodes.map((n, idx) => (
+                  <React.Fragment key={idx}>
+                    <div className={`dag-node ${n.status}`}>
+                      <div className="dag-node-title">{n.title}</div>
+                      <div className="dag-node-score">{n.likelihood}</div>
+                    </div>
+                    {idx < dagNodes.length - 1 && <div className="dag-arrow">→</div>}
+                  </React.Fragment>
+                ))}
+              </div>
+            ) : (
+              <div style={{ textAlign: "center", padding: "30px 0", color: "#94a3b8", fontSize: 12 }}>
+                {result ? "No causal paths detected in this run" : "Run a simulation to see causal network"}
+              </div>
+            )}
           </div>
 
           <div className="map-status-bar">
             <span className="map-status-left">
-              CONFIDENCE {primaryPath ? "0.91" : "0.86"} · UPDATED LIVE
+              {result
+                ? `${result.causal_paths?.length ?? 0} PATH(S) · ${result.activated_rules?.length ?? 0} RULE(S) ACTIVE`
+                : "AWAITING SIMULATION RUN"}
             </span>
             <button
               className="action-btn"
@@ -259,7 +343,9 @@ export default function CommandCenterView({
             <div>
               <span className="panel-title-text">PRIORITY SAFETY ACTIONS</span>
               <span className="panel-meta-text" style={{ marginLeft: 12 }}>
-                RANKED BY EXPECTED RISK REDUCTION
+                {result?.recommendation?.interventions?.length
+                  ? `${result.recommendation.interventions.length} RANKED BY EXPECTED RISK REDUCTION`
+                  : "RANKED BY EXPECTED RISK REDUCTION"}
               </span>
             </div>
             <button
@@ -274,18 +360,22 @@ export default function CommandCenterView({
           <div className="priority-action-card">
             <div className="priority-action-header">
               <span className="priority-action-title">{primaryActionTitle}</span>
-              <span className="badge-pill high">● HIGH</span>
+              {primaryCut && (
+                <span className={`badge-pill ${primaryCut.disruption === "high" ? "alert" : "elevated"}`}>
+                  ● {(primaryCut.disruption ?? "medium").toUpperCase()}
+                </span>
+              )}
             </div>
             <div className="priority-action-path">{primaryActionPath}</div>
             <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: 11.5, color: "#065f46", fontWeight: 700 }}>
-                Expected Risk Reduction: -31% (Reversible)
+                {expectedRiskReduction
+                  ? `Expected Risk Reduction: -${expectedRiskReduction} (${primaryCut?.disruption ?? "reversible"})`
+                  : result
+                  ? "No interventions required"
+                  : "Awaiting simulation"}
               </span>
-              {approvedQuick ? (
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#047857" }}>
-                  ✓ Approved & Dispatched
-                </span>
-              ) : (
+              {primaryCut && !approvedQuick && runId && (
                 <div style={{ display: "flex", gap: 8 }}>
                   <button
                     className="action-btn primary"
@@ -299,13 +389,18 @@ export default function CommandCenterView({
                     className="action-btn"
                     style={{ padding: "5px 12px", fontSize: 11 }}
                     onClick={() => {
-                      onSelectIntervention?.(primaryCut?.intervention_id || "INT-2047");
+                      onSelectIntervention?.(primaryCut?.intervention_id);
                       onNavigate("interventions");
                     }}
                   >
                     Decision Record →
                   </button>
                 </div>
+              )}
+              {approvedQuick && (
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#047857" }}>
+                  ✓ Approved & Dispatched
+                </span>
               )}
             </div>
           </div>
@@ -324,16 +419,22 @@ export default function CommandCenterView({
           </div>
 
           <div className="event-stream-list">
-            {displayEvents.map((ev, i) => (
-              <div className="event-stream-item" key={i}>
-                <span className="event-time">{ev.time}</span>
-                <span className="event-source">{ev.source}</span>
-                <span className="event-desc">{ev.desc}</span>
-                <span className={`badge-pill ${ev.severity.toLowerCase()}`}>
-                  ● {ev.severity}
-                </span>
+            {displayEvents.length > 0 ? (
+              displayEvents.map((ev, i) => (
+                <div className="event-stream-item" key={i}>
+                  <span className="event-time">{ev.time}</span>
+                  <span className="event-source">{ev.source}</span>
+                  <span className="event-desc">{ev.desc}</span>
+                  <span className={`badge-pill ${ev.severity.toLowerCase()}`}>
+                    ● {ev.severity}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div style={{ textAlign: "center", padding: "20px 0", color: "#94a3b8", fontSize: 12 }}>
+                No live events received yet
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>

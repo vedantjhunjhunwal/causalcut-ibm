@@ -6,7 +6,7 @@ import FactoryMapView from "../FactoryMapView";
 export default function PlantStateView({ scenario, result }) {
   const [activeZone, setActiveZone] = useState("ALL");
   const [syncing, setSyncing] = useState(false);
-  const [lastIngestTime, setLastIngestTime] = useState("00:09:41");
+  const [lastIngestTime, setLastIngestTime] = useState(null);
   const [backendWorkers, setBackendWorkers] = useState([]);
   const [backendPermits, setBackendPermits] = useState([]);
 
@@ -98,8 +98,7 @@ export default function PlantStateView({ scenario, result }) {
       const [w, p] = await Promise.all([api.workers(), api.permits()]);
       if (w?.workers) setBackendWorkers(w.workers);
       if (p?.permits) setBackendPermits(p.permits);
-      const now = new Date();
-      setLastIngestTime(now.toLocaleTimeString("en-GB", { hour12: false }));
+      setLastIngestTime(new Date().toLocaleTimeString("en-GB", { hour12: false }));
     } catch (e) {
       console.warn("Sync plant state fallback:", e);
     } finally {
@@ -107,6 +106,12 @@ export default function PlantStateView({ scenario, result }) {
     }
   };
 
+  // Refresh live state when a new result arrives
+  useEffect(() => {
+    fetchState();
+  }, [result?.scenario_id]);
+
+  // Also do an initial fetch on mount
   useEffect(() => {
     fetchState();
   }, []);
@@ -116,10 +121,15 @@ export default function PlantStateView({ scenario, result }) {
       ? displayEntities
       : displayEntities.filter((row) => row.zone.toLowerCase() === activeZone.toLowerCase());
 
-  const totalZonesCount = zonesList.length || 0;
-  const totalWorkersCount = scenario?.workers?.length ?? 0;
-  const totalMachinesCount = scenario?.assets?.length || scenario?.machine_readings?.length || 0;
-  const totalPermitsCount = scenario?.permits?.length || 0;
+  const totalZonesCount = (scenario?.zones ?? []).length;
+  const totalWorkersCount = (scenario?.workers ?? []).length;
+  const workersPresent = (scenario?.workers ?? []).filter((w) => w.present !== false).length;
+  const totalMachinesCount = (scenario?.assets ?? []).length || (scenario?.machine_readings ?? []).length;
+  const totalPermitsCount = (scenario?.permits ?? []).length;
+  // PPE violations derived from scenario workers
+  const ppeViolations = (scenario?.workers ?? []).filter((w) => w.missing_ppe?.length > 0).length;
+  // Stale sensor count
+  const staleSensors = (scenario?.gas_readings ?? []).filter((g) => g.stale === true).length;
 
   return (
     <div className="page-canvas">
@@ -165,7 +175,13 @@ export default function PlantStateView({ scenario, result }) {
       <div className="panel-box" style={{ marginBottom: 22 }}>
         <div className="panel-header-row">
           <span className="panel-title-text">STRUCTURED STATE REGISTER</span>
-          <span className="panel-meta-text">LAST INGEST {lastIngestTime}</span>
+          <span className="panel-meta-text">
+            {result
+              ? `REFLECTED FROM LAST RUN · ${lastIngestTime ?? ""}`
+              : lastIngestTime
+              ? `LAST SYNC ${lastIngestTime}`
+              : "AWAITING RUN"}
+          </span>
         </div>
 
         <div className="data-table-container">
@@ -207,19 +223,29 @@ export default function PlantStateView({ scenario, result }) {
           <div className="kpi-value">
             {totalZonesCount < 10 ? `0${totalZonesCount}` : totalZonesCount} / {totalZonesCount < 10 ? `0${totalZonesCount}` : totalZonesCount}
           </div>
-          <div className="kpi-subtitle">No stale zone state</div>
+          <div className="kpi-subtitle">
+            {staleSensors > 0 ? `${staleSensors} stale sensor(s)` : "No stale zone state"}
+          </div>
         </div>
 
         <div className="kpi-card accent-dark">
           <div className="kpi-title">WORKERS TRACKED</div>
           <div className="kpi-value">{totalWorkersCount}</div>
-          <div className="kpi-subtitle">Access control online</div>
+          <div className="kpi-subtitle">
+            {workersPresent > 0
+              ? `${workersPresent} present · ${ppeViolations > 0 ? `${ppeViolations} PPE violation${ppeViolations !== 1 ? "s" : ""}` : "all compliant"}`
+              : "No workers in scenario"}
+          </div>
         </div>
 
         <div className="kpi-card accent-dark">
           <div className="kpi-title">MACHINES ONLINE</div>
-          <div className="kpi-value">{totalMachinesCount} / {totalMachinesCount + 2}</div>
-          <div className="kpi-subtitle">2 maintenance windows</div>
+          <div className="kpi-value">
+            {totalMachinesCount > 0 ? `${totalMachinesCount} / ${totalMachinesCount}` : "—"}
+          </div>
+          <div className="kpi-subtitle">
+            {totalMachinesCount > 0 ? "All reporting" : "No machines in scenario"}
+          </div>
         </div>
 
         <div className="kpi-card accent-amber">
@@ -227,7 +253,11 @@ export default function PlantStateView({ scenario, result }) {
           <div className="kpi-value highlight-amber">
             {totalPermitsCount < 10 ? `0${totalPermitsCount}` : totalPermitsCount}
           </div>
-          <div className="kpi-subtitle">1 requires review</div>
+          <div className="kpi-subtitle">
+            {totalPermitsCount > 0
+              ? `${(scenario?.permits ?? []).filter((p) => p.status === "active").length} active`
+              : "No permits in scenario"}
+          </div>
         </div>
       </div>
     </div>

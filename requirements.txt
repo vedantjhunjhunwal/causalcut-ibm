@@ -21,3 +21,8 @@ simpy>=4.1.1
 # Uses the new google-genai SDK (avoids protobuf conflict with ortools)
 google-genai>=1.0.0
 protobuf>=6.33.1,<6.34
+
+# --- Groq (optional alternative LLM backend for agent features) ---
+# Set CAUSALCUT_AGENT_LLM_PROVIDER=groq and CAUSALCUT_GROQ_API_KEY to use Groq.
+# Supports Llama 3.x, Mixtral, Gemma 2 models via the Groq API.
+groq>=0.9.0

@@ -186,40 +186,48 @@ def _call_gemini(image_b64: str, image_mime: str, prompt: str) -> dict[str, Any]
 
     from app.core.config import get_settings
     settings = get_settings()
-    api_key = settings.gemini_api_key or os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
+    api_key_str = settings.gemini_api_key or os.environ.get("GOOGLE_API_KEY")
+    if not api_key_str:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="CAUSALCUT_GEMINI_API_KEY environment variable not set.",
         )
 
-    client = genai.Client(api_key=api_key)
-
+    keys = [k.strip() for k in api_key_str.split(",") if k.strip()]
     image_bytes = base64.b64decode(image_b64)
+    last_exc = None
+    response = None
 
-    try:
-        response = client.models.generate_content(
-            model="gemini-3.1-flash-lite",
-            contents=[
-                gtypes.Content(parts=[
-                    gtypes.Part(text=prompt),
-                    gtypes.Part(
-                        inline_data=gtypes.Blob(mime_type=image_mime, data=image_bytes)
-                    ),
-                ])
-            ],
-            config=gtypes.GenerateContentConfig(
-                temperature=0.1,
-                max_output_tokens=4096,
-                response_mime_type="application/json",
-                response_schema=BlueprintAnalysisOutput,
-            ),
-        )
-    except Exception as exc:
-        log.error("Gemini API call failed: %s", exc)
+    for key in keys:
+        client = genai.Client(api_key=key)
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.1-flash-lite",
+                contents=[
+                    gtypes.Content(parts=[
+                        gtypes.Part(text=prompt),
+                        gtypes.Part(
+                            inline_data=gtypes.Blob(mime_type=image_mime, data=image_bytes)
+                        ),
+                    ])
+                ],
+                config=gtypes.GenerateContentConfig(
+                    temperature=0.1,
+                    max_output_tokens=4096,
+                    response_mime_type="application/json",
+                    response_schema=BlueprintAnalysisOutput,
+                ),
+            )
+            break # Success, stop iterating over keys
+        except Exception as exc:
+            log.warning("Gemini API call failed with a key: %s", exc)
+            last_exc = exc
+
+    if response is None:
+        log.error("Gemini API call failed for all keys. Last error: %s", last_exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Gemini API error: {exc}",
+            detail=f"Gemini API error: {last_exc}",
         )
 
     raw = response.text.strip()

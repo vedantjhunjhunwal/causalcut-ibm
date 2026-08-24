@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import Plot from "react-plotly.js";
 import FactoryMapView from "./FactoryMapView";
 import ModelProvenance from "./ModelProvenance";
+import { api } from "../api";
 import {
   ShieldAlert,
   CheckCircle2,
@@ -13,6 +14,7 @@ import {
   Cpu,
   Check,
   X,
+  RefreshCw,
 } from "lucide-react";
 
 function ZoneCards({ zoneRisk = {}, graph }) {
@@ -100,11 +102,68 @@ function RiskTimeline({ timeline }) {
   );
 }
 
-export default function ResultsDashboard({ result, decision, onDecide, deciding }) {
+export default function ResultsDashboard({ result, runId, decision, onDecide, deciding }) {
   const [reason, setReason] = useState("");
+  // Alternative input state — shown after operator rejects
+  const [showAlternative, setShowAlternative] = useState(false);
+  const [altAction, setAltAction] = useState("");
+  const [altFactors, setAltFactors] = useState([]);
+  const [altConfidence, setAltConfidence] = useState(null);
+  const [altReason, setAltReason] = useState("");
+  const [submittingAlt, setSubmittingAlt] = useState(false);
+  const [altSubmitted, setAltSubmitted] = useState(false);
+
   const graph = result.graph || { nodes: [], edges: [] };
   const rec = result.recommendation;
   const tth = result.time_to_harm_seconds;
+
+  // Collect all unique causal factors across all recommended interventions
+  const allBreaksFactors = Array.from(
+    new Set(
+      (rec?.interventions ?? []).flatMap((iv) => iv.breaks_factors ?? [])
+    )
+  );
+
+  const handleReject = () => {
+    onDecide("REJECT", reason);
+    setShowAlternative(true);
+  };
+
+  const submitAlternative = async () => {
+    if (!altAction.trim()) {
+      alert("Please describe your alternative action before submitting.");
+      return;
+    }
+    if (!runId) {
+      alert("No run ID found — cannot persist this alternative.");
+      return;
+    }
+    setSubmittingAlt(true);
+    try {
+      const payload = {
+        alternative_action: altAction,
+        breaks_factors: altFactors,
+        operator_confidence: altConfidence ?? 3,
+        reason: altReason,
+      };
+      const resp = await api.submitAlternative(runId, payload);
+      if (resp.ok) {
+        setAltSubmitted(true);
+        setShowAlternative(false);
+      } else {
+        alert(`Failed to submit: ${resp.body?.detail ?? "Unknown error"}`);
+      }
+    } catch (e) {
+      alert(`Submission error: ${e.message}`);
+    } finally {
+      setSubmittingAlt(false);
+    }
+  };
+
+  const toggleAltFactor = (f) =>
+    setAltFactors((prev) =>
+      prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]
+    );
 
   const workers = graph.nodes.filter((n) => n.type === "worker");
   const sensors = graph.nodes.filter((n) => n.type === "sensor");
@@ -495,21 +554,23 @@ export default function ResultsDashboard({ result, decision, onDecide, deciding 
           </div>
         </div>
 
+        {/* Confirmed decision banner */}
         {decision ? (
-          <div
-            style={{
-              padding: "14px 18px",
-              backgroundColor: "#ecfdf5",
-              border: "1.5px solid #10b981",
-              borderRadius: 4,
-              fontSize: 12.5,
-              fontWeight: 600,
-              color: "#065f46",
-            }}
-          >
-            ✓ Decision persisted to tamper-evident audit log — seq #{decision.audit_seq || 5},{" "}
-            {decision.decision} by {decision.approver || "N. Sharma"} ({decision.approver_role || "shift_officer"}).
-            {decision.dispatched !== false ? " Interventions dispatched to DCS." : " No dispatch."}
+          <div style={{
+            padding: "14px 18px",
+            backgroundColor: decision.decision === "APPROVE" ? "#ecfdf5" : "#fef2f2",
+            border: `1.5px solid ${decision.decision === "APPROVE" ? "#10b981" : "#ef4444"}`,
+            borderRadius: 4,
+            fontSize: 12.5,
+            fontWeight: 600,
+            color: decision.decision === "APPROVE" ? "#065f46" : "#991b1b",
+          }}>
+            {decision.decision === "APPROVE" ? "✓" : "✕"} Decision persisted to tamper-evident audit log
+            {decision.audit_seq != null && ` — seq #${decision.audit_seq}`},{" "}
+            <b>{decision.decision}</b> by {decision.approver} ({decision.approver_role}).
+            {decision.decision === "APPROVE" && decision.dispatched !== false
+              ? " Interventions dispatched to DCS."
+              : ""}
           </div>
         ) : (
           <div>
@@ -520,13 +581,9 @@ export default function ResultsDashboard({ result, decision, onDecide, deciding 
               rows={2}
               placeholder="Reason or operational dispatch notes (optional)…"
               style={{
-                width: "100%",
-                padding: "8px 12px",
-                fontSize: 12,
-                borderRadius: 4,
-                border: "1px solid #cbd5e1",
-                marginBottom: 12,
-                boxSizing: "border-box",
+                width: "100%", padding: "8px 12px", fontSize: 12,
+                borderRadius: 4, border: "1px solid #cbd5e1",
+                marginBottom: 12, boxSizing: "border-box",
               }}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -545,12 +602,145 @@ export default function ResultsDashboard({ result, decision, onDecide, deciding 
                 className="action-btn"
                 style={{ padding: "8px 18px", fontSize: 12.5, color: "#b91c1c" }}
                 disabled={deciding}
-                onClick={() => onDecide("REJECT", reason)}
+                onClick={handleReject}
               >
                 <X size={14} />
                 <span>✕ Reject</span>
               </button>
             </div>
+          </div>
+        )}
+
+        {/* ── Alternative Input — shown after REJECT, before submission ──────── */}
+        {showAlternative && !altSubmitted && (
+          <div style={{
+            marginTop: 20, padding: 18,
+            backgroundColor: "#fffbeb", border: "1px solid #fde68a",
+            borderRadius: 6,
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "#92400e", marginBottom: 8 }}>
+              📝 What would you have done instead?
+            </div>
+            <div style={{ fontSize: 12, color: "#78350f", marginBottom: 14, lineHeight: 1.6 }}>
+              Your alternative is captured as an operator learning signal. The system uses these to improve recommendations
+              over time based on real field expertise — your experience teaches the model.
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {/* Alternative action text */}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", display: "block", marginBottom: 4 }}>
+                  ALTERNATIVE ACTION *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Shut down conveyor, evacuate zone B, call maintenance…"
+                  style={{
+                    width: "100%", padding: "8px 12px", fontSize: 13,
+                    border: "1.5px solid #d97706", borderRadius: 4, boxSizing: "border-box",
+                  }}
+                  value={altAction}
+                  onChange={(e) => setAltAction(e.target.value)}
+                />
+              </div>
+
+              {/* Causal factors this addresses — derived from actual result */}
+              {allBreaksFactors.length > 0 && (
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", display: "block", marginBottom: 6 }}>
+                    WHICH CAUSAL FACTORS DOES YOUR ACTION ADDRESS?
+                  </label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {allBreaksFactors.map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => toggleAltFactor(f)}
+                        style={{
+                          padding: "4px 12px", borderRadius: 12, fontSize: 11.5, fontWeight: 600,
+                          cursor: "pointer", transition: "all 0.15s",
+                          border: `1.5px solid ${altFactors.includes(f) ? "#d97706" : "#e2e8f0"}`,
+                          backgroundColor: altFactors.includes(f) ? "#fef3c7" : "#f8fafc",
+                          color: altFactors.includes(f) ? "#92400e" : "#64748b",
+                        }}
+                      >
+                        {f.replace(/_/g, " ")}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Operator confidence rating */}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", display: "block", marginBottom: 6 }}>
+                  YOUR CONFIDENCE IN THIS ALTERNATIVE (1 = uncertain · 5 = certain)
+                </label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setAltConfidence(n)}
+                      style={{
+                        width: 36, height: 36, borderRadius: "50%", fontSize: 14, fontWeight: 700,
+                        cursor: "pointer", transition: "all 0.15s",
+                        border: `1.5px solid ${altConfidence === n ? "#d97706" : "#e2e8f0"}`,
+                        backgroundColor: altConfidence === n ? "#fef3c7" : "#f8fafc",
+                        color: altConfidence === n ? "#92400e" : "#94a3b8",
+                      }}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Operational context */}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", display: "block", marginBottom: 4 }}>
+                  REASON / OPERATIONAL CONTEXT (optional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Our SOP requires manual evacuation for ammonia above 250 ppm regardless of ventilation status…"
+                  style={{
+                    width: "100%", padding: "8px 12px", fontSize: 12,
+                    border: "1px solid #d97706", borderRadius: 4, boxSizing: "border-box",
+                    resize: "vertical",
+                  }}
+                  value={altReason}
+                  onChange={(e) => setAltReason(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  className="action-btn primary"
+                  style={{ padding: "8px 18px", backgroundColor: "#d97706", borderColor: "#d97706" }}
+                  onClick={submitAlternative}
+                  disabled={submittingAlt}
+                >
+                  {submittingAlt && <RefreshCw size={13} className="animate-spin" />}
+                  <span>{submittingAlt ? "Submitting…" : "Submit Learning Signal"}</span>
+                </button>
+                <button
+                  className="action-btn"
+                  onClick={() => setShowAlternative(false)}
+                >
+                  Skip for now
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Submitted confirmation */}
+        {altSubmitted && (
+          <div style={{
+            marginTop: 16, padding: "12px 16px",
+            backgroundColor: "#fffbeb", border: "1px solid #fde68a",
+            borderRadius: 4, fontSize: 12.5, fontWeight: 600, color: "#92400e",
+          }}>
+            ✓ Alternative learning signal recorded — the model will factor your expertise into future recommendations.
           </div>
         )}
       </div>

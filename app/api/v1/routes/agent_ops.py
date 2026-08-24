@@ -5,7 +5,8 @@ GET  /agent-ops/patterns           — Agent 2: incident pattern mining
 GET  /agent-ops/compliance-scorecard — Agent 3: compliance audit scorecard
 
 All endpoints:
-  - Require CAUSALCUT_AGENT_ENABLED=true and CAUSALCUT_GEMINI_API_KEY set
+  - Require CAUSALCUT_AGENT_ENABLED=true and either CAUSALCUT_GEMINI_API_KEY
+    (provider=gemini, default) or CAUSALCUT_GROQ_API_KEY (provider=groq) set.
   - Return status=503 with a clear error if not configured (fail loudly)
   - Return output tagged information_class="S" (agent-proposed, synthetic)
   - NEVER approve, execute, or dispatch plant interventions
@@ -33,15 +34,22 @@ router = APIRouter(prefix="/agent-ops", tags=["agent-ops"])
 
 def _require_agent(settings, response: Response) -> str | None:
     """Check that the agent is enabled and a key is configured.
-    Returns the api_key if ok, or sets response status and returns None.
+    Returns the gemini api_key if ok (may be None when using groq), or sets
+    response status and returns the sentinel '\x00' to signal failure.
     """
     if not settings.agent_enabled:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return None
-    if not settings.gemini_api_key:
-        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return None
-    return settings.gemini_api_key
+    provider = settings.agent_llm_provider
+    if provider == "groq":
+        if not settings.groq_api_key:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            return None
+    else:
+        if not settings.gemini_api_key:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            return None
+    return settings.gemini_api_key  # may be None when provider=groq (that's fine)
 
 
 # --------------------------------------------------------------------------- #
@@ -70,10 +78,10 @@ async def response_draft(
 ) -> dict[str, Any]:
     settings = get_settings()
     api_key = _require_agent(settings, response)
-    if api_key is None:
+    if api_key is None and settings.agent_llm_provider != "groq":
         return {
             "error": "agent_disabled",
-            "detail": "Set CAUSALCUT_AGENT_ENABLED=true and CAUSALCUT_GEMINI_API_KEY to enable agents.",
+            "detail": "Set CAUSALCUT_AGENT_ENABLED=true and CAUSALCUT_GEMINI_API_KEY (or CAUSALCUT_GROQ_API_KEY with CAUSALCUT_AGENT_LLM_PROVIDER=groq) to enable agents.",
         }
 
     engine = request.app.state.risk_engine
@@ -94,8 +102,10 @@ async def response_draft(
     result = draft_emergency_response(
         cut_dict=cut_dict,
         path_dict=path_dict,
-        api_key=api_key,
+        api_key=api_key or "",
         model=settings.agent_model_name,
+        provider=settings.agent_llm_provider,
+        groq_api_key=settings.groq_api_key,
     )
     return result
 
@@ -116,10 +126,10 @@ async def response_draft(
 async def incident_patterns(request: Request, response: Response) -> dict[str, Any]:
     settings = get_settings()
     api_key = _require_agent(settings, response)
-    if api_key is None:
+    if api_key is None and settings.agent_llm_provider != "groq":
         return {
             "error": "agent_disabled",
-            "detail": "Set CAUSALCUT_AGENT_ENABLED=true and CAUSALCUT_GEMINI_API_KEY to enable agents.",
+            "detail": "Set CAUSALCUT_AGENT_ENABLED=true and CAUSALCUT_GEMINI_API_KEY (or CAUSALCUT_GROQ_API_KEY with CAUSALCUT_AGENT_LLM_PROVIDER=groq) to enable agents.",
         }
 
     engine = request.app.state.risk_engine
@@ -132,9 +142,11 @@ async def incident_patterns(request: Request, response: Response) -> dict[str, A
 
     result = mine_incident_patterns(
         recent_paths=recent_path_dicts,
-        api_key=api_key,
+        api_key=api_key or "",
         model=settings.agent_model_name,
         rag_url=rag_url,
+        provider=settings.agent_llm_provider,
+        groq_api_key=settings.groq_api_key,
     )
     return result
 
@@ -156,10 +168,10 @@ async def incident_patterns(request: Request, response: Response) -> dict[str, A
 async def compliance_scorecard(request: Request, response: Response) -> dict[str, Any]:
     settings = get_settings()
     api_key = _require_agent(settings, response)
-    if api_key is None:
+    if api_key is None and settings.agent_llm_provider != "groq":
         return {
             "error": "agent_disabled",
-            "detail": "Set CAUSALCUT_AGENT_ENABLED=true and CAUSALCUT_GEMINI_API_KEY to enable agents.",
+            "detail": "Set CAUSALCUT_AGENT_ENABLED=true and CAUSALCUT_GEMINI_API_KEY (or CAUSALCUT_GROQ_API_KEY with CAUSALCUT_AGENT_LLM_PROVIDER=groq) to enable agents.",
         }
 
     engine = request.app.state.risk_engine
@@ -187,8 +199,10 @@ async def compliance_scorecard(request: Request, response: Response) -> dict[str
 
     result = run_compliance_scorecard(
         plant_state=plant_state,
-        api_key=api_key,
+        api_key=api_key or "",
         model=settings.agent_model_name,
         rag_url=rag_url,
+        provider=settings.agent_llm_provider,
+        groq_api_key=settings.groq_api_key,
     )
     return result
