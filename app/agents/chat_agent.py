@@ -119,16 +119,19 @@ class ChatAgent(BaseAgent):
 
         if self.llm_client and getattr(self.llm_client, "_client", None) is not None:
             try:
-                response = await self.llm_client.generate(
-                    system_prompt=CHAT_SYSTEM_PROMPT,
-                    messages=messages,
-                    tools=available_tools
+                response = await asyncio.wait_for(
+                    self.llm_client.generate(
+                        system_prompt=CHAT_SYSTEM_PROMPT,
+                        messages=messages,
+                        tools=available_tools
+                    ),
+                    timeout=8.0
                 )
                 if response.text and not response.text.strip().startswith("Error:"):
                     final_text = response.text
                     tool_calls = response.tool_calls
             except Exception as exc:
-                log.warning(f"LLM API unavailable or quota exceeded: {exc}. Gracefully using local copilot.")
+                log.warning(f"LLM API timeout or quota exceeded: {exc}. Gracefully using local copilot.")
 
         if not final_text:
             msg_lower = user_message.lower()
