@@ -203,6 +203,19 @@ export default function AuthPage() {
                   </>
                 )}
               </button>
+
+              <button
+                type="button"
+                className="btn-auth-submit"
+                style={{ marginTop: "10px", background: "rgba(74,140,181,0.15)", border: "1px solid rgba(74,140,181,0.3)", color: "#7dc5ea" }}
+                onClick={async () => {
+                  setLoginLoading(true);
+                  await login("officer@steelforge.ai", "demo-pass");
+                  navigate("/factories", { replace: true });
+                }}
+              >
+                <span>⚡ Quick Demo Shift Access</span>
+              </button>
             </form>
 
             <p className="auth-switch-hint">
