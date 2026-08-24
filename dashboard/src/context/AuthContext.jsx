@@ -36,23 +36,32 @@ export function AuthProvider({ children }) {
 
   // ── Bootstrap: resolve existing session ──────────────────────────────────
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      if (s?.user?.id) loadUserData(s.user.id);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, s) => {
+    supabase.auth.getSession()
+      .then(({ data: { session: s } }) => {
         setSession(s);
         if (s?.user?.id) loadUserData(s.user.id);
-        else {
-          setUserProfile(null);
-          setFactories([]);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.warn("Auth getSession error:", err);
+        setLoading(false);
+      });
+
+    try {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        (_event, s) => {
+          setSession(s);
+          if (s?.user?.id) loadUserData(s.user.id);
+          else {
+            setUserProfile(null);
+            setFactories([]);
+          }
         }
-      }
-    );
-    return () => subscription.unsubscribe();
+      );
+      return () => subscription?.unsubscribe?.();
+    } catch {
+      setLoading(false);
+    }
   }, [loadUserData]);
 
   // ── Login (email + password) ─────────────────────────────────────────────

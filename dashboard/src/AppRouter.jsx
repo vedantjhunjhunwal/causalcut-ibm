@@ -56,9 +56,10 @@ export default function AppRouter() {
       <Route path="/onboarding" element={
         <Protected><OnboardingFlow /></Protected>
       } />
-      <Route path="/dashboard/:factoryId" element={
-        <Protected><App /></Protected>
-      } />
+      <Route path="/dashboard" element={<App />} />
+      <Route path="/dashboard/:factoryId" element={<App />} />
+      <Route path="/plant" element={<App />} />
+      <Route path="/app" element={<App />} />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
