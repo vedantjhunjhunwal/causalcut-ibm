@@ -5,13 +5,12 @@ import FactoryMap from "./FactoryMap";
 // Zone IDs must match the STEELFORGE_LAYOUT keys in FactoryMap.jsx so the
 // hardcoded coordinates are used and the map is always visible.
 const DEFAULT_ZONES = [
-  { zone_id: "zone-cnc",   name: "CNC Machining Floor",  hazard_class: "standard" },
-  { zone_id: "zone-hyd",   name: "Hydraulic Press Bay",  hazard_class: "high_risk" },
-  { zone_id: "zone-gas",   name: "Gas Storage",          hazard_class: "gas_hazard" },
-  { zone_id: "zone-ppe",   name: "PPE Check",            hazard_class: "standard" },
-  { zone_id: "zone-ctrl",  name: "Control Room",         hazard_class: "standard" },
-  { zone_id: "zone-break", name: "Break Room",           hazard_class: "standard" },
-  { zone_id: "zone-entry", name: "Entry",                hazard_class: "standard" },
+  { zone_id: "zone-1", name: "Coke Oven",           hazard_class: "gas_hazard" },
+  { zone_id: "zone-2", name: "Blast Furnace",       hazard_class: "high_risk" },
+  { zone_id: "zone-3", name: "Machine Shop",        hazard_class: "standard" },
+  { zone_id: "zone-4", name: "Shared Utilities",    hazard_class: "propagation" },
+  { zone_id: "zone-5", name: "CCTV/PPE Checkpoints",hazard_class: "standard" },
+  { zone_id: "zone-6", name: "Control Room",        hazard_class: "standard" },
 ];
 
 export default function FactoryMapView({

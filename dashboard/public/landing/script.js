@@ -84,9 +84,35 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ── Hero: Sever button ── */
   const severBtn = document.getElementById('btn-sever-chain');
   if (severBtn) severBtn.addEventListener('click', () => {
-    severBtn.textContent = 'CHAIN SEVERED ✓';
+    severBtn.innerHTML = 'CHAIN SEVERED ✓';
     severBtn.style.background = '#22C55E';
     severBtn.style.color = '#fff';
+    setTimeout(() => {
+      window.top.location.href = '/auth';
+    }, 600);
+  });
+
+  const switchUnitBtn = document.getElementById('btn-switch-unit');
+  if (switchUnitBtn) switchUnitBtn.addEventListener('click', () => {
+    window.top.location.href = '/auth';
+  });
+
+  const alertExpandBtn = document.getElementById('btn-alert-expand');
+  if (alertExpandBtn) alertExpandBtn.addEventListener('click', () => {
+    window.top.location.href = '/auth';
+  });
+
+  const readDocsBtn = document.getElementById('btn-read-docs');
+  if (readDocsBtn) readDocsBtn.addEventListener('click', () => {
+    window.top.location.href = '/auth';
+  });
+
+  /* ── Right Sidebar Links ── */
+  ['link-monitoring', 'link-incident', 'link-logs'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', () => {
+      window.top.location.href = '/auth';
+    });
   });
 
   /* ── Gauge ring animation ── */

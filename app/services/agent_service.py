@@ -75,15 +75,10 @@ except ImportError:  # pragma: no cover - exercised only without the package
 # skipping any model already attempted.
 # ---------------------------------------------------------------------------
 GEMINI_MODEL_CASCADE: list[str] = [
-    "gemini-3.7-flash",       # Frontier — best for agents and complex workflows
-    "gemini-3.6-flash",       # Production — balanced efficiency and planning
-    "gemini-3.5-flash",       # Production — long-horizon agentic workflows
-    "gemini-3.5-flash-lite",  # Budget — high-volume, low-latency
-    "gemini-3.1-flash-lite",  # Budget — high-efficiency, cost-sensitive
-    # Legacy 2.5.x still active until Oct 2026 shutdown — included as last
-    # resort fallbacks only. Remove after Oct 20 2026.
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-3.7-flash",
 ]
 
 # HTTP status codes that trigger a fallback to the next model in the cascade.
@@ -333,7 +328,12 @@ class AgentService:
         # function calls, prior function responses, etc.) — unlike the
         # `history` parameter which is the stale session history from
         # before this request started.
-        accumulated_history = list(getattr(chat, "history", None) or history)
+        # The new google-genai SDK uses get_history(), older ones use .history
+        _hist = getattr(chat, "get_history", None)
+        if callable(_hist):
+            accumulated_history = list(_hist())
+        else:
+            accumulated_history = list(getattr(chat, "history", None) or history)
 
         try:
             response = chat.send_message(message)

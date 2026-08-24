@@ -197,7 +197,7 @@ export default function OnboardingFlow() {
             <h2 className="ob-pane-title">Your Factory Details</h2>
             <p className="ob-pane-sub">
               Tell us about the facility you're configuring for{" "}
-              <strong>{session.industryName}</strong>.
+              <strong>{userProfile?.industry_name || "your company"}</strong>.
             </p>
 
             <div className="ob-form">

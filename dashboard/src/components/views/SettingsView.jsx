@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Settings, User, Key, Sliders, Building } from "lucide-react";
 
-export default function SettingsView({ operator, setOperator, facility, setFacility }) {
+export default function SettingsView({ operator, setOperator, facility, setFacility = () => {} }) {
   const [apiKey, setApiKey] = useState("dev-key-so-a");
   const [threshold, setThreshold] = useState(0.15);
   const [saved, setSaved] = useState(false);

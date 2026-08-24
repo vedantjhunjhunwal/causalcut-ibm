@@ -215,9 +215,6 @@ function ChatBubble({ role, text, toolCalls, modelUsed }) {
         ) : (
           <FormattedContent text={text} />
         )}
-        {!isUser && modelUsed && (
-          <div className="chat-model-tag">{modelUsed}</div>
-        )}
       </div>
     </div>
   );
@@ -249,25 +246,31 @@ export default function ChatDrawer({ open, onClose }) {
     setBusy(true);
     setError(null);
 
-    const { ok, body } = await api.agentChat(message, sessionId);
+    try {
+      const { ok, body } = await api.agentChat(message, sessionId);
 
-    if (!ok) {
-      setError(body?.detail || "The agent is unavailable right now.");
+      if (!ok) {
+        setError(body?.detail || "The agent is unavailable right now.");
+        setBusy(false);
+        return;
+      }
+
+      setSessionId(body.session_id);
+      setMessages((m) => [
+        ...m,
+        {
+          role: "agent",
+          text: body.reply,
+          toolCalls: body.tool_calls,
+          modelUsed: body.model_used,
+        },
+      ]);
+    } catch (err) {
+      console.error("Chat error:", err);
+      setError("Network error: Could not reach the agent service.");
+    } finally {
       setBusy(false);
-      return;
     }
-
-    setSessionId(body.session_id);
-    setMessages((m) => [
-      ...m,
-      {
-        role: "agent",
-        text: body.reply,
-        toolCalls: body.tool_calls,
-        modelUsed: body.model_used,
-      },
-    ]);
-    setBusy(false);
   };
 
   const onKeyDown = (e) => {

@@ -46,10 +46,12 @@ _SEVERITY_THRESHOLD = 0.70   # above this, Agent 1 auto-drafts
 def _gemini_generate(prompt: str, api_key: str, model: str = "gemini-2.0-flash") -> str:
     """Call Gemini and return the text response. Returns an error string on failure."""
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        m = genai.GenerativeModel(model)
-        response = m.generate_content(prompt)
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt,
+        )
         return response.text
     except Exception as exc:
         logger.warning("gemini call failed: %s", exc)

@@ -31,7 +31,11 @@ async def ready(db: DbDep, queue: QueueDep, response: Response) -> dict:
     try:
         db_health = await db.health()
         checks["database"] = db_health
-        ok = ok and db_health["connected"] and str(db_health["journal_mode"]).lower() == "wal"
+        # Only check WAL mode if the DB provides it (e.g., SQLite).
+        if "journal_mode" in db_health:
+            ok = ok and db_health["connected"] and str(db_health["journal_mode"]).lower() == "wal"
+        else:
+            ok = ok and db_health["connected"]
     except Exception as exc:
         checks["database"] = {"error": str(exc)}
         ok = False

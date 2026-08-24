@@ -20,7 +20,7 @@ export default function InterventionsView({ selectedId = "INT-2047", scenario, r
       title: iv.action,
       severity: idx === 0 ? "HIGH" : idx === 1 ? "MEDIUM" : "LOW",
       reduction: `-${Math.round((iv.risk_reduction || 0.31 - idx * 0.1) * 100)}%`,
-      reversible: iv.reversible ? "YES" : "YES",
+      reversible: iv.reversible ? "YES" : "NO",
       subtitle: `${zone} · Priority ${iv.priority || idx + 1} · reversible`,
       leverage: iv.breaks_factors?.length
         ? `Stops active causal edge between ${iv.breaks_factors.join(" and ")}.`

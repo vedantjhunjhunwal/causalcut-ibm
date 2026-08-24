@@ -67,14 +67,17 @@ async def agent_chat(payload: AgentChatIn, request: Request, response: Response)
 async def agent_status() -> dict[str, Any]:
     settings = get_settings()
     configured = False
+    model_cascade = []
     if settings.agent_enabled:
         service = get_agent_service(settings.gemini_api_key, settings.agent_model_name)
         configured = service.enabled
+        if configured:
+            model_cascade = service.model_cascade
     return {
         "enabled": settings.agent_enabled,
         "configured": configured,
         "model": settings.agent_model_name if settings.agent_enabled else None,
-        "model_cascade": service.model_cascade if configured else [],
+        "model_cascade": model_cascade,
         "read_only": True,
         "note": "This agent can read plant state and reasoning outputs. It cannot approve or dispatch anything. "
                 "If the primary model returns 404/429/5xx, it auto-falls back through the cascade.",

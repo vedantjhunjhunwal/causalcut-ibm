@@ -32,39 +32,34 @@ const getRiskColor = (riskScore) => {
 };
 
 // ---------------------------------------------------------------------------
-// Hardcoded floor-plan layout for the Steelforge factory image.
-// Coordinates are normalised [0-1] relative to SVG_WIDTH × SVG_HEIGHT.
-// Matches the spatial arrangement in the uploaded floor-plan exactly:
+// Hardcoded floor-plan layout for the Steelforge factory.
+// Zone IDs match the backend hypergraph: zone-1 … zone-6.
 //
-//   ┌─────────────────────────┬───────────────┐
-//   │   CNC Machining Floor   │ Hydraulic     │  ┌──────────┐
-//   │       (zone-cnc)        │ Press Bay     │  │  Break   │
-//   │                         │  (zone-hyd)   │  │  Room    │
-//   ├────────┬────────┬────────┴───────────────┤  ├──────────┤
-//   │ Gas    │  PPE   │    Control Room        │  │  Entry   │
-//   │Storage │ Check  │     (zone-ctrl)        │  │(zone-en) │
-//   └────────┴────────┴────────────────────────┘  └──────────┘
-//
+//   ┌─────────────────────────┬───────────────────────────┐
+//   │   zone-1 (Coke Oven)    │  zone-2 (Blast Furnace)   │
+//   │       gas_hazard         │       high_risk           │
+//   ├─────────────────────────┼───────────────────────────┤
+//   │ zone-4 (Shared Utils)   │  zone-3 (Machine Shop)    │
+//   │     propagation          │   rotating_equipment      │
+//   ├────────────┬────────────┴───────────────────────────┤
+//   │ zone-5     │  zone-6 (Control Room)                 │
+//   │ CCTV/PPE   │       admin                            │
+//   └────────────┴────────────────────────────────────────┘
 // ---------------------------------------------------------------------------
 const STEELFORGE_LAYOUT = {
-  'zone-cnc':   { x_norm: 0.01, y_norm: 0.02, w_norm: 0.44, h_norm: 0.44, color: 'rgba(22,163,74,0.18)',  stroke: '#22c55e' },
-  'zone-hyd':   { x_norm: 0.46, y_norm: 0.02, w_norm: 0.30, h_norm: 0.44, color: 'rgba(202,138,4,0.22)', stroke: '#eab308' },
-  'zone-gas':   { x_norm: 0.01, y_norm: 0.50, w_norm: 0.26, h_norm: 0.48, color: 'rgba(220,38,38,0.22)', stroke: '#ef4444' },
-  'zone-ppe':   { x_norm: 0.29, y_norm: 0.50, w_norm: 0.18, h_norm: 0.48, color: 'rgba(16,185,129,0.14)', stroke: '#10b981' },
-  'zone-ctrl':  { x_norm: 0.49, y_norm: 0.50, w_norm: 0.27, h_norm: 0.48, color: 'rgba(16,185,129,0.14)', stroke: '#10b981' },
-  'zone-break': { x_norm: 0.78, y_norm: 0.02, w_norm: 0.21, h_norm: 0.44, color: 'rgba(16,185,129,0.12)', stroke: '#10b981' },
-  'zone-entry': { x_norm: 0.78, y_norm: 0.50, w_norm: 0.21, h_norm: 0.48, color: 'rgba(16,185,129,0.12)', stroke: '#10b981' },
+  'zone-1': { x_norm: 0.02, y_norm: 0.02, w_norm: 0.47, h_norm: 0.38, color: 'rgba(220,38,38,0.18)',  stroke: '#ef4444' },
+  'zone-2': { x_norm: 0.51, y_norm: 0.02, w_norm: 0.47, h_norm: 0.38, color: 'rgba(202,138,4,0.22)',  stroke: '#eab308' },
+  'zone-4': { x_norm: 0.02, y_norm: 0.44, w_norm: 0.47, h_norm: 0.28, color: 'rgba(202,138,4,0.12)',  stroke: '#a3870a' },
+  'zone-3': { x_norm: 0.51, y_norm: 0.44, w_norm: 0.47, h_norm: 0.28, color: 'rgba(22,163,74,0.18)',  stroke: '#22c55e' },
+  'zone-5': { x_norm: 0.02, y_norm: 0.76, w_norm: 0.25, h_norm: 0.22, color: 'rgba(16,185,129,0.14)', stroke: '#10b981' },
+  'zone-6': { x_norm: 0.29, y_norm: 0.76, w_norm: 0.69, h_norm: 0.22, color: 'rgba(16,185,129,0.14)', stroke: '#10b981' },
 };
 
-// Corridor connector segments (purely decorative, matching the image)
+// Corridor connector segments between zone rows
 const CORRIDORS = [
-  // Horizontal corridor between zones in the bottom row
-  { x: 0.27, y: 0.71, w: 0.02, h: 0.08 }, // gap between gas & ppe
-  { x: 0.47, y: 0.71, w: 0.02, h: 0.08 }, // gap between ppe & ctrl
-  { x: 0.76, y: 0.71, w: 0.02, h: 0.08 }, // gap between ctrl & entry
-  // Vertical connector between top and bottom rows
-  { x: 0.44, y: 0.44, w: 0.02, h: 0.06 }, // CNC -> corridor
-  { x: 0.60, y: 0.44, w: 0.02, h: 0.06 }, // Hyd -> ctrl
+  { x: 0.48, y: 0.14, w: 0.03, h: 0.12 },  // zone-1 ↔ zone-2 top
+  { x: 0.48, y: 0.52, w: 0.03, h: 0.10 },  // zone-4 ↔ zone-3 mid
+  { x: 0.25, y: 0.71, w: 0.04, h: 0.06 },  // zone-5 ↔ zone-6 bottom
 ];
 
 function getLayout(zoneId) {
@@ -355,9 +350,14 @@ export default function FactoryMap({
                 className="entity-icon"
                 onMouseMove={e => handleMouseMove(e, { type: 'sensor', data: s })}
                 onMouseLeave={handleMouseLeave}>
-                <circle r={13} fill="#0f172a" stroke="#3b82f6" strokeWidth={1.5}/>
-                <text x={0} y={5} fontSize={12} textAnchor="middle">⛽</text>
-                <text x={0} y={23} className="entity-text" textAnchor="middle" fontSize={9}>
+                <circle r={14} fill="#0f172a" stroke="#3b82f6" strokeWidth={1.8}/>
+                {/* Sensor crosshair icon */}
+                <circle r={4} fill="none" stroke="#60a5fa" strokeWidth={1.2}/>
+                <line x1={0} y1={-8} x2={0} y2={-4} stroke="#60a5fa" strokeWidth={1.2}/>
+                <line x1={0} y1={4} x2={0} y2={8} stroke="#60a5fa" strokeWidth={1.2}/>
+                <line x1={-8} y1={0} x2={-4} y2={0} stroke="#60a5fa" strokeWidth={1.2}/>
+                <line x1={4} y1={0} x2={8} y2={0} stroke="#60a5fa" strokeWidth={1.2}/>
+                <text x={0} y={24} className="entity-text" textAnchor="middle" fontSize={9}>
                   {(s.id || s.sensor_id || '').replace('GS-','').replace('VENT-','')}
                 </text>
               </g>
@@ -375,13 +375,15 @@ export default function FactoryMap({
                 className="entity-icon"
                 onMouseMove={e => handleMouseMove(e, { type: 'worker', data: w })}
                 onMouseLeave={handleMouseLeave}>
-                <circle r={13} fill="#0f172a" stroke="#8b5cf6" strokeWidth={1.5}/>
-                <text x={0} y={5} fontSize={12} textAnchor="middle">👷</text>
+                <circle r={14} fill="#0f172a" stroke="#8b5cf6" strokeWidth={1.8}/>
+                {/* Person silhouette */}
+                <circle cx={0} cy={-4} r={3.5} fill="#c4b5fd"/>
+                <path d="M -6 8 Q -6 1 0 1 Q 6 1 6 8" fill="#c4b5fd"/>
                 {/* PPE status dot */}
-                <circle cx={10} cy={-9} r={4}
+                <circle cx={10} cy={-9} r={4.5}
                   fill={hasPPE ? '#10b981' : '#ef4444'}
-                  stroke="#0f172a" strokeWidth={1}/>
-                <text x={0} y={23} className="entity-text" textAnchor="middle" fontSize={9}>
+                  stroke="#0f172a" strokeWidth={1.2}/>
+                <text x={0} y={24} className="entity-text" textAnchor="middle" fontSize={9}>
                   {(w.id || w.worker_id || '').split('-').slice(-1)[0]}
                 </text>
               </g>
@@ -393,16 +395,22 @@ export default function FactoryMap({
             if (!a._pos) return null;
             if (showCausalFocus && !causalNodes.has(a.id || a.asset_id)) return null;
             const isFailing = (a.failure_probability || a.metadata?.failure_prob || 0) > 0.5;
+            const gearColor = isFailing ? '#fca5a5' : '#f9a8d4';
             return (
               <g key={a.id || a.asset_id}
                 transform={`translate(${a._pos.x}, ${a._pos.y})`}
                 className="entity-icon"
                 onMouseMove={e => handleMouseMove(e, { type: 'asset', data: a })}
                 onMouseLeave={handleMouseLeave}>
-                <rect x={-13} y={-13} width={26} height={26} rx={4}
-                  fill="#0f172a" stroke={isFailing ? '#ef4444' : '#ec4899'} strokeWidth={1.5}/>
-                <text x={0} y={5} fontSize={12} textAnchor="middle">⚙️</text>
-                <text x={0} y={23} className="entity-text" textAnchor="middle" fontSize={9}>
+                <rect x={-14} y={-14} width={28} height={28} rx={5}
+                  fill="#0f172a" stroke={isFailing ? '#ef4444' : '#ec4899'} strokeWidth={1.8}/>
+                {/* Gear icon */}
+                <circle r={4} fill="none" stroke={gearColor} strokeWidth={1.5}/>
+                <line x1={0} y1={-8} x2={0} y2={8} stroke={gearColor} strokeWidth={1.2}/>
+                <line x1={-8} y1={0} x2={8} y2={0} stroke={gearColor} strokeWidth={1.2}/>
+                <line x1={-5.5} y1={-5.5} x2={5.5} y2={5.5} stroke={gearColor} strokeWidth={1.2}/>
+                <line x1={5.5} y1={-5.5} x2={-5.5} y2={5.5} stroke={gearColor} strokeWidth={1.2}/>
+                <text x={0} y={24} className="entity-text" textAnchor="middle" fontSize={9}>
                   {(a.id || a.asset_id || '').split('-')[0]}
                 </text>
               </g>
@@ -419,10 +427,13 @@ export default function FactoryMap({
                 className="entity-icon"
                 onMouseMove={e => handleMouseMove(e, { type: 'permit', data: p })}
                 onMouseLeave={handleMouseLeave}>
-                <rect x={-12} y={-14} width={24} height={28} rx={2}
-                  fill="#0f172a" stroke="#eab308" strokeWidth={1.5}/>
-                <text x={0} y={4} fontSize={12} textAnchor="middle">📜</text>
-                <text x={0} y={23} className="entity-text" textAnchor="middle" fontSize={9}>PTW</text>
+                <rect x={-13} y={-15} width={26} height={30} rx={3}
+                  fill="#0f172a" stroke="#eab308" strokeWidth={1.8}/>
+                {/* Document lines */}
+                <line x1={-6} y1={-7} x2={6} y2={-7} stroke="#fde047" strokeWidth={1.2} strokeLinecap="round"/>
+                <line x1={-6} y1={-2} x2={6} y2={-2} stroke="#fde047" strokeWidth={1.2} strokeLinecap="round"/>
+                <line x1={-6} y1={3} x2={3} y2={3} stroke="#fde047" strokeWidth={1.2} strokeLinecap="round"/>
+                <text x={0} y={25} className="entity-text" textAnchor="middle" fontSize={9}>PTW</text>
               </g>
             );
           })}
@@ -474,10 +485,10 @@ export default function FactoryMap({
           <div className="legend-color" style={{ background: COLORS.criticalBorder }}/>
           <span>Critical (&gt;0.6)</span>
         </div>
-        <div className="legend-item"><span style={{marginRight:'4px'}}>⛽</span> Sensor</div>
-        <div className="legend-item"><span style={{marginRight:'4px'}}>👷</span> Worker</div>
-        <div className="legend-item"><span style={{marginRight:'4px'}}>⚙️</span> Asset</div>
-        <div className="legend-item"><span style={{marginRight:'4px'}}>📜</span> Permit</div>
+        <div className="legend-item"><div className="legend-color" style={{ background: '#3b82f6', borderRadius: '50%' }}/><span>Sensor</span></div>
+        <div className="legend-item"><div className="legend-color" style={{ background: '#8b5cf6', borderRadius: '50%' }}/><span>Worker</span></div>
+        <div className="legend-item"><div className="legend-color" style={{ background: '#ec4899' }}/><span>Asset</span></div>
+        <div className="legend-item"><div className="legend-color" style={{ background: '#eab308' }}/><span>Permit</span></div>
       </div>
 
       {/* Tooltip */}

@@ -56,6 +56,9 @@ export default function AppRouter() {
       <Route path="/onboarding" element={
         <Protected><OnboardingFlow /></Protected>
       } />
+      <Route path="/dashboard" element={
+        <Protected><App /></Protected>
+      } />
       <Route path="/dashboard/:factoryId" element={
         <Protected><App /></Protected>
       } />

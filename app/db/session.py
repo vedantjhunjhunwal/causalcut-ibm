@@ -20,9 +20,35 @@ from app.core.logging import get_logger
 log = get_logger(__name__)
 
 
+class MockSupabaseResponse:
+    def __init__(self, data=None):
+        self.data = data or []
+
+class MockSupabaseBuilder:
+    def __init__(self):
+        self._data = []
+    def select(self, *args, **kwargs): return self
+    def insert(self, *args, **kwargs): return self
+    def update(self, *args, **kwargs): return self
+    def upsert(self, *args, **kwargs): return self
+    def eq(self, *args, **kwargs): return self
+    def neq(self, *args, **kwargs): return self
+    def lt(self, *args, **kwargs): return self
+    def lte(self, *args, **kwargs): return self
+    def gt(self, *args, **kwargs): return self
+    def gte(self, *args, **kwargs): return self
+    def order(self, *args, **kwargs): return self
+    def limit(self, *args, **kwargs): return self
+    def not_(self, *args, **kwargs): return self
+    def execute(self): return MockSupabaseResponse()
+
+class MockSupabaseClient:
+    def table(self, name: str) -> MockSupabaseBuilder:
+        return MockSupabaseBuilder()
+
 class Database:
     def __init__(self) -> None:
-        self.client: Client | None = None
+        self.client: Client | MockSupabaseClient | None = None
         self._connected = False
 
     async def connect(self) -> Self:
@@ -31,7 +57,11 @@ class Database:
         key: str = settings.supabase_service_role_key or "dummy"
         
         def _connect():
-            self.client = create_client(url, key)
+            if url == "http://localhost:8000" or url == "":
+                self.client = MockSupabaseClient()
+                log.info("using mock supabase client for local dev")
+            else:
+                self.client = create_client(url, key)
             self._connected = True
             
         await asyncio.to_thread(_connect)

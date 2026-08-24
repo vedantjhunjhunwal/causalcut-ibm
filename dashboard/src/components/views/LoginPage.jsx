@@ -43,12 +43,7 @@ export default function LoginPage() {
     setLoading(true);
     // Simulate brief auth delay for UX feel
     await new Promise((r) => setTimeout(r, 900));
-    login({
-      industryName: form.industryName.trim(),
-      industryType: form.industryType,
-      adminName: form.adminName.trim(),
-      adminEmail: form.adminEmail.trim(),
-    });
+    login(form.adminEmail.trim(), form.accessCode.trim());
   };
 
   return (
