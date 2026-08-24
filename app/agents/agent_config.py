@@ -31,7 +31,7 @@ class AgentSettings(BaseSettings):
 
     # --- LLM Settings ----------------------------------------------------
     llm_provider: str = "gemini"  # "gemini" | "local" | "mock"
-    llm_model: str = "gemini-flash-latest"
+    llm_model: str = "gemini-3.6-flash"
     llm_api_key: str | None = None
     llm_temperature: float = 0.2
     llm_max_tokens: int = 2048

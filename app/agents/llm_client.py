@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -10,12 +11,6 @@ from pydantic import BaseModel
 from app.core.logging import get_logger
 
 log = get_logger(__name__)
-
-try:
-    import google.generativeai as genai
-    HAS_GENAI = True
-except ImportError:
-    HAS_GENAI = False
 
 SAFETY_PROMPT = """
 CRITICAL SAFETY INSTRUCTION:
@@ -43,24 +38,21 @@ class LLMClient:
         max_tokens: int,
     ) -> None:
         self.provider = provider
-        self.model = model
+        self.model = model or "gemini-3.6-flash"
         self.api_key = api_key
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self._client = None
 
-        if self.provider == "gemini" and HAS_GENAI and self.api_key and "your-" not in self.api_key:
+        if self.provider == "gemini" and self.api_key and "your-" not in self.api_key:
             try:
-                genai.configure(api_key=self.api_key)
-                self._client = genai.GenerativeModel(self.model)
-                log.info(f"Initialized Google Gemini LLM client with model: {self.model}")
+                from google import genai
+                self._client = genai.Client(api_key=self.api_key)
+                log.info(f"Initialized Google GenAI client with model: {self.model}")
             except Exception as exc:
-                log.warning(f"Failed to initialize model {self.model}: {exc}. Trying gemini-1.5-flash fallback.")
-                try:
-                    self._client = genai.GenerativeModel("gemini-1.5-flash")
-                except Exception:
-                    self._client = None
+                log.warning(f"Failed to initialize google.genai client: {exc}")
+                self._client = None
         else:
-            self._client = None
             log.info("Generative AI client using local intelligent safety assistant mode.")
 
     async def generate(
@@ -83,14 +75,24 @@ class LLMClient:
         try:
             chat_context = "\n".join([f"{m.get('role', 'user').capitalize()}: {m.get('content', '')}" for m in msg_list])
             full_prompt = f"{full_system_prompt}\n\nCONVERSATION HISTORY:\n{chat_context}\n\nAssistant Response:"
-            generation_config = genai.GenerationConfig(
-                temperature=self.temperature,
-                max_output_tokens=self.max_tokens,
-            )
-            response = await self._client.generate_content_async(full_prompt, generation_config=generation_config)
-            return LLMResponse(text=response.text, tokens_used=0)
+
+            def _call_genai():
+                from google.genai import types
+                cfg = types.GenerateContentConfig(
+                    temperature=self.temperature,
+                    max_output_tokens=self.max_tokens,
+                )
+                res = self._client.models.generate_content(
+                    model=self.model,
+                    contents=full_prompt,
+                    config=cfg,
+                )
+                return res.text
+
+            text = await asyncio.to_thread(_call_genai)
+            return LLMResponse(text=text, tokens_used=0)
         except Exception as e:
-            log.warning(f"LLM API generation exception (e.g. rate limit/quota): {e}. Gracefully activating local safety copilot fallback.")
+            log.warning(f"LLM API generation exception: {e}. Gracefully activating local safety copilot fallback.")
             return LLMResponse(text="", tokens_used=0)
 
     async def generate_structured(
@@ -113,4 +115,4 @@ class LLMClient:
         try:
             return json.loads(response.text)
         except Exception:
-            return {}
+            return {"raw_text": response.text}
