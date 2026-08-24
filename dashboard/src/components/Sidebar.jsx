@@ -93,10 +93,18 @@ export default function Sidebar({
               {section.items.map((item) => {
                 const Icon = item.icon;
                 const isAiAgent = item.id === "ai-agent";
-                const isActive = activeTab === item.id;
+                const isActive = isAiAgent ? isChatOpen : activeTab === item.id;
                 
                 const handleClick = () => {
-                  setActiveTab(item.id);
+                  if (isAiAgent) {
+                    if (onToggleChat) {
+                      onToggleChat();
+                    } else {
+                      setActiveTab(item.id);
+                    }
+                  } else {
+                    setActiveTab(item.id);
+                  }
                 };
 
                 return (
