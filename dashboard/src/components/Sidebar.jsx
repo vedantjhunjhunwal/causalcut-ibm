@@ -15,6 +15,8 @@ import {
   Settings,
   ChevronDown,
   Bot,
+  Brain,
+  ShieldCheck,
 } from "lucide-react";
 
 export default function Sidebar({ activeTab, setActiveTab, pendingApprovalsCount = 2, operator }) {
@@ -29,6 +31,7 @@ export default function Sidebar({ activeTab, setActiveTab, pendingApprovalsCount
       group: "COMMAND",
       items: [
         { id: "command-center", label: "Command center", icon: LayoutDashboard },
+        { id: "ai-situation", label: "AI Situation", icon: Brain },
         { id: "plant-state", label: "Plant state", icon: Layers },
         { id: "risk-paths", label: "Risk paths", icon: GitBranch },
         { id: "interventions", label: "Interventions", icon: Target },
@@ -47,6 +50,7 @@ export default function Sidebar({ activeTab, setActiveTab, pendingApprovalsCount
       group: "GOVERNANCE",
       items: [
         { id: "approvals", label: "Approvals", icon: ClipboardCheck, badge: pendingApprovalsCount },
+        { id: "compliance", label: "Compliance", icon: ShieldCheck },
         { id: "audit-log", label: "Audit log", icon: FileSearch },
         { id: "models", label: "Models", icon: Cpu },
       ],

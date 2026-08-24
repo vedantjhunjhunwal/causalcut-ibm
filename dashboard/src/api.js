@@ -90,16 +90,33 @@ export const api = {
   modelStatus: () => fetch(`${API}/models/status`).then(json).catch(() => null),
   modelReadiness: () => fetch(`${API}/models/readiness`).then(json).catch(() => null),
 
-  // Agentic AI — read-only Safety Intelligence chat. Never writes/approves
-  // anything; it can only report, explain and simulate (see
-  // app/engine/agent_tools.py for the enforced tool whitelist).
-  agentStatus: () => fetch(`${API}/agent/status`).then(json).catch(() => null),
-  agentChat: (message, sessionId = null) =>
-    fetch(`${API}/agent/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, session_id: sessionId }),
-    }).then(envelope),
+  // --- Agent API functions ---
+  agentStatus: async () => fetch(`${API}/agents/status`).then(json).catch(() => fetch(`${API}/agent/status`).then(json).catch(() => null)),
+  agentSituation: async () => fetch(`${API}/agents/situation`).then(json).catch(() => null),
+  agentAlerts: async (limit = 20) => fetch(`${API}/agents/alerts?limit=${limit}`).then(json).catch(() => ({ alerts: [] })),
+  agentProposals: async () => fetch(`${API}/agents/proposals`).then(json).catch(() => ({ proposals: [] })),
+  agentProposalDetail: async (id) => fetch(`${API}/agents/proposals/${id}`).then(json).catch(() => null),
+  decideProposal: async (id, decision, notes = '') =>
+    fetch(`${API}/agents/proposals/${id}/decide`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision, notes })
+    }).then(json),
+  agentChat: async (sessionId, message) =>
+    fetch(`${API}/agents/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, message })
+    }).then(json),
+  agentChatHistory: async (sessionId, limit = 50) =>
+    fetch(`${API}/agents/chat/history?session_id=${sessionId}&limit=${limit}`).then(json).catch(() => []),
+  agentCompliance: async () => fetch(`${API}/agents/compliance`).then(json).catch(() => null),
+  agentConfig: async (config) =>
+    fetch(`${API}/agents/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    }).then(json),
 };
 
 // ---------------------------------------------------------------------------
@@ -261,8 +278,7 @@ export class ProgressSocket {
           this.onError?.(err);
           return;
         }
-      }
-      if (data && data.status && data.status !== "running" && data.result) break;
+      }      if (data && data.status && data.status !== "running" && data.result) break;
       await sleep(SETTLE_DELAY_MS);
     }
 
@@ -289,4 +305,28 @@ export class ProgressSocket {
     }
     this.ws = null;
   }
+}
+
+export class AgentEventSocket {
+  constructor(onEvent) {
+    const wsBase = import.meta.env.VITE_WS_BASE || 'ws://localhost:8000';
+    this.ws = new WebSocket(`${wsBase}/api/v1/ws/agents/events`);
+    this.ws.onmessage = (e) => onEvent(JSON.parse(e.data));
+    this.ws.onerror = () => console.warn('Agent event WS error');
+  }
+  close() { this.ws?.close(); }
+}
+
+export class AgentChatSocket {
+  constructor(sessionId, onMessage, onToolUse) {
+    const wsBase = import.meta.env.VITE_WS_BASE || 'ws://localhost:8000';
+    this.ws = new WebSocket(`${wsBase}/api/v1/ws/agents/chat/${sessionId}`);
+    this.ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === 'tool_use') onToolUse?.(data);
+      else onMessage?.(data);
+    };
+  }
+  send(message) { this.ws?.send(JSON.stringify({ message })); }
+  close() { this.ws?.close(); }
 }

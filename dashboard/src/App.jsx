@@ -17,9 +17,11 @@ import SettingsView from "./components/views/SettingsView";
 import AiAgentView from "./components/views/AiAgentView";
 import ChatDrawer from "./components/ChatDrawer";
 import { MessageSquare } from "lucide-react";
-import { EMPTY_SCENARIO } from "./components/ScenarioBuilder";
 import { useAuth } from "./context/AuthContext";
 import { supabase } from "./lib/supabase";
+import AgentSituationBoard from "./components/AgentSituationBoard";
+import AgentChatPanel from "./components/AgentChatPanel";
+import ComplianceReportView from "./components/views/ComplianceReportView";
 import "./App.css";
 
 export default function App() {
@@ -145,6 +147,18 @@ export default function App() {
     };
   }, []);
 
+  // Preload canonical scenario on mount so Run Simulation works immediately
+  useEffect(() => {
+    fetch(`${api.API || "http://localhost:8000/api/v1"}/scenario/sample/coke_oven_scenario`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && data.name) {
+          setScenario(data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => () => socketRef.current?.close(), []);
 
   const resetRunState = () => {
@@ -162,6 +176,21 @@ export default function App() {
     resetRunState();
     setPhase("running");
     setWsState("running");
+
+    // Fallback if empty
+    let payload = scn;
+    if (!payload?.name || !payload?.zones?.length) {
+      try {
+        const sampleRes = await fetch(`${api.API || "http://localhost:8000/api/v1"}/scenario/sample/coke_oven_scenario`);
+        const sampleData = await sampleRes.json();
+        if (sampleData && sampleData.name) {
+          payload = sampleData;
+          setScenario(sampleData);
+        }
+      } catch (e) {
+        console.warn("Could not load fallback scenario:", e);
+      }
+    }
 
     const stageKeys = [
       "validating",
@@ -193,7 +222,7 @@ export default function App() {
       const res = await fetch(`${api.API || "http://localhost:8000/api/v1"}/scenario/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(scn),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       clearInterval(stageInterval);
@@ -267,6 +296,8 @@ export default function App() {
             onSelectIntervention={(id) => setSelectedInterventionId(id)}
           />
         );
+      case "ai-situation":
+        return <AgentSituationBoard onNavigate={setActiveTab} />;
       case "plant-state":
         return <PlantStateView scenario={scenario} result={result} />;
       case "risk-paths":
@@ -307,6 +338,8 @@ export default function App() {
         );
       case "live-events":
         return <LiveEventsView scenario={scenario} />;
+      case "compliance":
+        return <ComplianceReportView />;
       case "approvals":
         return <ApprovalsView scenario={scenario} result={result} onNavigate={setActiveTab} />;
       case "audit-log":
@@ -360,14 +393,7 @@ export default function App() {
         {renderActiveView()}
       </div>
 
-      {/* Agentic Safety Intelligence chat — read-only, see ChatDrawer.jsx */}
-      {/* Hide the FAB when AI Agent tab is active (chat is already in the main view) */}
-      {!isChatOpen && activeTab !== "ai-agent" && (
-        <button className="chat-fab" onClick={() => setIsChatOpen(true)} aria-label="Open Safety Intelligence chat">
-          <MessageSquare size={22} />
-        </button>
-      )}
-      <ChatDrawer open={isChatOpen} onClose={() => setIsChatOpen(false)} />
+      <AgentChatPanel />
     </div>
   );
 }

@@ -192,3 +192,77 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 );
 INSERT OR IGNORE INTO schema_migrations (version, applied_at)
 VALUES ('1.0.0', datetime('now'));
+
+INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+VALUES ('2.0.0', datetime('now'));
+
+-- ---------------------------------------------------------------------
+-- AGENT SYSTEM TABLES (Agentic AI Layer)
+-- ---------------------------------------------------------------------
+
+-- Agent message bus history
+CREATE TABLE IF NOT EXISTS agent_messages (
+    id             TEXT PRIMARY KEY,
+    timestamp      TEXT NOT NULL,
+    sender         TEXT NOT NULL,
+    recipient      TEXT NOT NULL,
+    message_type   TEXT NOT NULL,
+    priority       TEXT NOT NULL DEFAULT 'NORMAL' CHECK (priority IN ('LOW','NORMAL','HIGH','CRITICAL')),
+    payload        TEXT NOT NULL,
+    processed      INTEGER NOT NULL DEFAULT 0 CHECK (processed IN (0,1))
+);
+CREATE INDEX IF NOT EXISTS idx_agent_msg_recipient ON agent_messages (recipient, processed, timestamp);
+CREATE INDEX IF NOT EXISTS idx_agent_msg_type ON agent_messages (message_type, timestamp DESC);
+
+-- Agent episodic memory
+CREATE TABLE IF NOT EXISTS agent_episodes (
+    id             TEXT PRIMARY KEY,
+    agent_name     TEXT NOT NULL,
+    timestamp      TEXT NOT NULL,
+    observation    TEXT NOT NULL,
+    thought        TEXT NOT NULL,
+    action         TEXT NOT NULL,
+    outcome        TEXT,
+    reward         REAL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_ep_agent ON agent_episodes (agent_name, timestamp DESC);
+
+-- Intervention proposals from planning agent
+CREATE TABLE IF NOT EXISTS intervention_proposals (
+    id               TEXT PRIMARY KEY,
+    created_at       TEXT NOT NULL,
+    alert_id         TEXT,
+    status           TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','auto_dispatched','expired')),
+    cuts             TEXT NOT NULL,
+    risk_reduction   REAL,
+    residual_risk    REAL,
+    reasoning_trace  TEXT,
+    operator_summary TEXT,
+    regulatory_citations TEXT,
+    decided_by       TEXT,
+    decided_at       TEXT,
+    decision_notes   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_proposals_status ON intervention_proposals (status, created_at DESC);
+
+-- Compliance check history
+CREATE TABLE IF NOT EXISTS compliance_checks (
+    id             TEXT PRIMARY KEY,
+    timestamp      TEXT NOT NULL,
+    status         TEXT NOT NULL CHECK (status IN ('compliant','warning','violation')),
+    items          TEXT NOT NULL,
+    summary        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_compliance_ts ON compliance_checks (timestamp DESC);
+
+-- Chat conversation history
+CREATE TABLE IF NOT EXISTS chat_history (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id     TEXT NOT NULL,
+    timestamp      TEXT NOT NULL,
+    role           TEXT NOT NULL CHECK (role IN ('user','assistant','system','tool')),
+    content        TEXT NOT NULL,
+    tool_calls     TEXT,
+    metadata       TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_chat_session ON chat_history (session_id, timestamp);
