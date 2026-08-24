@@ -230,9 +230,6 @@ function ChatBubble({ role, text, toolCalls, modelUsed }) {
         ) : (
           <FormattedContent text={text} />
         )}
-        {!isUser && modelUsed && (
-          <div className="agent-model-tag">{modelUsed}</div>
-        )}
       </div>
       {isUser && (
         <div className="agent-avatar user">
